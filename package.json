@@ -1,0 +1,27 @@
+{
+  "name": "tiny-watch-party-plugin",
+  "version": "0.0.1",
+  "description": "小さなコミュニティでのウォッチパーティプラグイン",
+  "main": "extension/manifest.json",
+  "scripts": {
+    "version:patch": "npm version patch --no-git-tag-version",
+    "version:minor": "npm version minor --no-git-tag-version",
+    "version:major": "npm version major --no-git-tag-version",
+    "sync:manifest": "node -e \"const pkg = require('./package.json'); const manifest = require('./extension/manifest.json'); manifest.version = pkg.version; require('fs').writeFileSync('./extension/manifest.json', JSON.stringify(manifest, null, 2) + '\\n');\"",
+    "release:patch": "npm run version:patch && npm run sync:manifest && git add . && git commit -m \"chore: bump version to $(node -p 'require(\"./package.json\").version')\" && git tag v$(node -p 'require(\"./package.json\").version')",
+    "push": "git push && git push --tags"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/user/tiny-watch-party-plugin.git"
+  },
+  "keywords": [
+    "chrome-extension",
+    "watch-party",
+    "sidebar",
+    "chat"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {}
+}
