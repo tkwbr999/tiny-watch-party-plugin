@@ -112,15 +112,6 @@
           </div>
         </div>
         
-        <div id="hint" style="
-          padding: 8px 12px;
-          background: #e9ecef;
-          font-size: 12px;
-          color: #666;
-          text-align: center;
-        ">
-          Alt+Shift+C または拡張機能アイコンで表示/非表示
-        </div>
       </div>
     `;
     
