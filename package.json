@@ -1,6 +1,6 @@
 {
   "name": "tiny-watch-party-plugin",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "小さなコミュニティでのウォッチパーティプラグイン",
   "main": "extension/manifest.json",
   "scripts": {
