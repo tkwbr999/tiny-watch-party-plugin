@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "Tiny Watch Party - Sidebar MVP",
+  "version": "0.1.0",
+  "description": "小さなコミュニティでのウォッチパーティプラグイン",
+  "permissions": ["storage"],
+  "action": {
+    "default_title": "Toggle Tiny Watch Party"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "commands": {
+    "toggle-sidebar": {
+      "suggested_key": {
+        "default": "Alt+Shift+C"
+      },
+      "description": "Toggle Tiny Watch Party Sidebar"
+    }
+  }
+}
