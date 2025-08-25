@@ -74,38 +74,34 @@
         right: 0;
         width: 360px;
         height: 100vh;
-        background: rgba(0, 0, 0, 0.05);
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-        border-left: 1px solid rgba(255, 255, 255, 0.2);
+        background: transparent;
+        border-left: 1px solid rgba(255, 255, 255, 0.15);
         z-index: 2147483646;
         display: flex;
         flex-direction: column;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         font-size: 14px;
         box-shadow: 
-          inset 0 0 20px rgba(255, 255, 255, 0.05),
-          0 0 40px rgba(0, 0, 0, 0.1);
+          inset 1px 0 0 rgba(255, 255, 255, 0.1),
+          -1px 0 3px rgba(0, 0, 0, 0.2);
       ">
         <div id="header" style="
           padding: 8px 12px;
           border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-          background: rgba(0, 0, 0, 0.1);
+          background: transparent;
           text-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
         ">
           <button id="countdown-button" style="
             width: 100%;
             padding: 8px 12px;
-            background: rgba(59, 130, 246, 0.4);
+            background: rgba(59, 130, 246, 0.3);
             color: rgba(255, 255, 255, 0.95);
             border: 1px solid rgba(59, 130, 246, 0.6);
             border-radius: 4px;
             cursor: pointer;
             font-size: 14px;
             font-weight: bold;
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            text-shadow: 0 0 2px rgba(0, 0, 0, 0.7);
+            text-shadow: 0 0 4px rgba(0, 0, 0, 1);
             transition: all 0.2s ease;
           ">カウントダウン</button>
         </div>
@@ -119,9 +115,7 @@
         <div id="input-container" style="
           padding: 12px;
           border-top: 1px solid rgba(255, 255, 255, 0.1);
-          background: rgba(0, 0, 0, 0.1);
-          backdrop-filter: blur(5px);
-          -webkit-backdrop-filter: blur(5px);
+          background: transparent;
         ">
           <div style="display: flex; gap: 8px;">
             <input type="text" id="message-input" placeholder="メッセージを入力..." style="
@@ -130,22 +124,18 @@
               border: 1px solid rgba(255, 255, 255, 0.3);
               border-radius: 4px;
               font-size: 14px;
-              background: rgba(0, 0, 0, 0.2);
+              background: rgba(0, 0, 0, 0.1);
               color: rgba(255, 255, 255, 0.95);
-              backdrop-filter: blur(5px);
-              -webkit-backdrop-filter: blur(5px);
             ">
             <button id="send-button" style="
               padding: 8px 16px;
-              background: rgba(59, 130, 246, 0.4);
+              background: rgba(59, 130, 246, 0.3);
               color: rgba(255, 255, 255, 0.95);
               border: 1px solid rgba(59, 130, 246, 0.6);
               border-radius: 4px;
               cursor: pointer;
               font-size: 14px;
-              backdrop-filter: blur(10px);
-              -webkit-backdrop-filter: blur(10px);
-              text-shadow: 0 0 2px rgba(0, 0, 0, 0.7);
+              text-shadow: 0 0 4px rgba(0, 0, 0, 1);
             ">送信</button>
           </div>
         </div>
@@ -201,11 +191,9 @@
       messageElement.style.cssText = `
         margin-bottom: 8px;
         padding: 8px 12px;
-        background: rgba(0, 0, 0, 0.15);
+        background: rgba(0, 0, 0, 0.05);
         border-radius: 8px;
         border-left: 2px solid rgba(59, 130, 246, 0.5);
-        backdrop-filter: blur(3px);
-        -webkit-backdrop-filter: blur(3px);
       `;
       
       messageElement.innerHTML = `
@@ -214,9 +202,9 @@
           color: rgba(255, 255, 255, 0.9); 
           margin-bottom: 4px;
           text-shadow: 
-            0 0 3px rgba(0, 0, 0, 0.8),
-            0 0 8px rgba(0, 0, 0, 0.6),
-            1px 1px 2px rgba(0, 0, 0, 0.9);
+            0 0 5px rgba(0, 0, 0, 1),
+            0 0 10px rgba(0, 0, 0, 0.9),
+            2px 2px 3px rgba(0, 0, 0, 1);
         ">
           ${htmlEscape(message.ts)}
         </div>
@@ -225,9 +213,9 @@
           line-height: 1.4;
           font-weight: 500;
           text-shadow: 
-            0 0 4px rgba(0, 0, 0, 0.9),
-            0 0 12px rgba(0, 0, 0, 0.7),
-            2px 2px 4px rgba(0, 0, 0, 0.8);
+            0 0 6px rgba(0, 0, 0, 1),
+            0 0 15px rgba(0, 0, 0, 0.9),
+            3px 3px 5px rgba(0, 0, 0, 1);
         ">
           ${htmlEscape(message.text)}
         </div>
