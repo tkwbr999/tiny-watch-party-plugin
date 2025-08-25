@@ -91,12 +91,23 @@
           padding: 8px 12px;
           border-bottom: 1px solid rgba(255, 255, 255, 0.1);
           background: rgba(0, 0, 0, 0.1);
-          font-weight: bold;
-          color: rgba(255, 255, 255, 0.8);
-          font-size: 12px;
           text-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
         ">
-          Tiny Watch Party
+          <button id="countdown-button" style="
+            width: 100%;
+            padding: 8px 12px;
+            background: rgba(59, 130, 246, 0.4);
+            color: rgba(255, 255, 255, 0.95);
+            border: 1px solid rgba(59, 130, 246, 0.6);
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            text-shadow: 0 0 2px rgba(0, 0, 0, 0.7);
+            transition: all 0.2s ease;
+          ">カウントダウン</button>
         </div>
         
         <div id="messages-container" style="
@@ -147,6 +158,7 @@
     messagesList = shadowRoot.getElementById('messages-container');
     inputField = shadowRoot.getElementById('message-input');
     const sendButton = shadowRoot.getElementById('send-button');
+    const countdownButton = shadowRoot.getElementById('countdown-button');
     
     inputField.addEventListener('keypress', (e) => {
       if (e.key === 'Enter') {
@@ -155,6 +167,7 @@
     });
     
     sendButton.addEventListener('click', sendMessage);
+    countdownButton.addEventListener('click', startCountdown);
     
     document.documentElement.appendChild(sidebarContainer);
   }
@@ -242,6 +255,44 @@
     
     renderMessages();
     saveToStorage();
+  }
+
+  function startCountdown() {
+    const countdownButton = shadowRoot.getElementById('countdown-button');
+    if (!countdownButton) return;
+    
+    // ボタンを無効化
+    countdownButton.disabled = true;
+    countdownButton.textContent = 'カウントダウン中...';
+    countdownButton.style.opacity = '0.6';
+    countdownButton.style.cursor = 'not-allowed';
+    
+    const countdownMessages = ['5', '4', '3', '2', '1', '再生！'];
+    let currentIndex = 0;
+    
+    const countdownInterval = setInterval(() => {
+      if (currentIndex >= countdownMessages.length) {
+        clearInterval(countdownInterval);
+        
+        // ボタンを再有効化
+        countdownButton.disabled = false;
+        countdownButton.textContent = 'カウントダウン';
+        countdownButton.style.opacity = '1';
+        countdownButton.style.cursor = 'pointer';
+        return;
+      }
+      
+      const message = {
+        ts: formatTime(),
+        text: countdownMessages[currentIndex]
+      };
+      
+      messages.push(message);
+      renderMessages();
+      saveToStorage();
+      
+      currentIndex++;
+    }, 1000);
   }
 
   function toggleSidebar() {
