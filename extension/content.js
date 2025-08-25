@@ -6,18 +6,20 @@
 
   let isVisible = false;
   let messages = [];
-  
+  let backgroundOpacity = 5; // Default 5% opacity
+
   // Timer state
   let timerStartTime = null;
   let timerInterval = null;
   let isTimerRunning = false;
   let timerOffset = 0;
-  
+
   const STORAGE_KEYS = {
     visible: 'twpp_visible',
     messages: 'twpp_messages',
     timerStartTime: 'twpp_timer_start',
-    timerOffset: 'twpp_timer_offset'
+    timerOffset: 'twpp_timer_offset',
+    backgroundOpacity: 'twpp_background_opacity',
   };
 
   let sidebarContainer;
@@ -40,20 +42,25 @@
   async function loadFromStorage() {
     try {
       const result = await chrome.storage.local.get([
-        STORAGE_KEYS.visible, 
+        STORAGE_KEYS.visible,
         STORAGE_KEYS.messages,
         STORAGE_KEYS.timerStartTime,
-        STORAGE_KEYS.timerOffset
+        STORAGE_KEYS.timerOffset,
+        STORAGE_KEYS.backgroundOpacity,
       ]);
-      
+
       isVisible = result[STORAGE_KEYS.visible] || false;
       messages = result[STORAGE_KEYS.messages] || [];
-      
+      backgroundOpacity =
+        result[STORAGE_KEYS.backgroundOpacity] !== undefined
+          ? result[STORAGE_KEYS.backgroundOpacity]
+          : 5;
+
       // タイマー状態を復元
       if (result[STORAGE_KEYS.timerStartTime]) {
         timerStartTime = result[STORAGE_KEYS.timerStartTime];
         timerOffset = result[STORAGE_KEYS.timerOffset] || 0;
-        
+
         // タイマーが設定されている場合はUIを復元
         setTimeout(() => {
           const header = shadowRoot?.getElementById('header');
@@ -61,7 +68,7 @@
             // ヘッダーをタイマーUIに変更
             const currentTime = Date.now();
             const elapsedSeconds = Math.floor((currentTime - timerStartTime) / 1000) + timerOffset;
-            
+
             header.innerHTML = `
               <div id="timer-controls" style="
                 display: flex; 
@@ -110,10 +117,10 @@
                 ">↺</button>
               </div>
             `;
-            
+
             // イベントリスナーを設定
             setupTimerEventListeners();
-            
+
             // タイマーを再開
             isTimerRunning = true;
             timerInterval = setInterval(updateTimerDisplay, 1000);
@@ -131,7 +138,8 @@
         [STORAGE_KEYS.visible]: isVisible,
         [STORAGE_KEYS.messages]: messages,
         [STORAGE_KEYS.timerStartTime]: timerStartTime,
-        [STORAGE_KEYS.timerOffset]: timerOffset
+        [STORAGE_KEYS.timerOffset]: timerOffset,
+        [STORAGE_KEYS.backgroundOpacity]: backgroundOpacity,
       });
     } catch (error) {
       console.error('Storage save error:', error);
@@ -142,7 +150,7 @@
     sidebarContainer = document.createElement('div');
     sidebarContainer.id = 'twpp-sidebar-container';
     shadowRoot = sidebarContainer.attachShadow({ mode: 'closed' });
-    
+
     const sidebarHTML = `
       <style>
         #message-input::placeholder {
@@ -158,12 +166,14 @@
       </style>
       <div id="sidebar" style="
         position: fixed;
-        top: 0;
+        top: 130px;
         right: 0;
-        width: 360px;
-        height: 100vh;
+        width: 300px;
+        height: calc(100vh - 280px);
         background: transparent;
-        border-left: 1px solid rgba(255, 255, 255, 0.15);
+        border-left: 1px solid rgba(59, 130, 246, 0.6);
+        border-top: 1px solid rgba(59, 130, 246, 0.6);
+        border-bottom: 1px solid rgba(59, 130, 246, 0.6);
         z-index: 2147483646;
         display: flex;
         flex-direction: column;
@@ -173,9 +183,61 @@
           inset 1px 0 0 rgba(255, 255, 255, 0.1),
           -1px 0 3px rgba(0, 0, 0, 0.2);
       ">
+        <div id="opacity-control" style="
+          padding: 8px 12px;
+          border-bottom: 1px solid rgba(59, 130, 246, 0.6);
+          background: transparent;
+        ">
+          <div style="
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.8);
+            margin-bottom: 6px;
+          ">
+            <span style="text-shadow: 0 0 3px rgba(0, 0, 0, 1);">透明度</span>
+            <span id="opacity-value" style="
+              font-family: monospace;
+              text-shadow: 0 0 3px rgba(0, 0, 0, 1);
+              min-width: 30px;
+              text-align: right;
+            ">5</span>
+          </div>
+          <input type="range" id="opacity-slider" min="0" max="100" value="5" style="
+            width: 100%;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 2px;
+            outline: none;
+            -webkit-appearance: none;
+            cursor: pointer;
+          ">
+          <style>
+            #opacity-slider::-webkit-slider-thumb {
+              -webkit-appearance: none;
+              width: 16px;
+              height: 16px;
+              background: rgba(59, 130, 246, 0.8);
+              border-radius: 50%;
+              cursor: pointer;
+              box-shadow: 0 0 4px rgba(0, 0, 0, 0.3);
+            }
+            #opacity-slider::-moz-range-thumb {
+              width: 16px;
+              height: 16px;
+              background: rgba(59, 130, 246, 0.8);
+              border-radius: 50%;
+              cursor: pointer;
+              border: none;
+              box-shadow: 0 0 4px rgba(0, 0, 0, 0.3);
+            }
+          </style>
+        </div>
+        
         <div id="header" style="
           padding: 8px 12px;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+          border-bottom: 1px solid rgba(59, 130, 246, 0.6);
           background: transparent;
           text-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
         ">
@@ -198,11 +260,13 @@
           flex: 1;
           overflow-y: auto;
           padding: 8px;
+          border-top: 1px solid rgba(59, 130, 246, 0.6);
+          border-bottom: 1px solid rgba(59, 130, 246, 0.6);
         "></div>
         
         <div id="input-container" style="
           padding: 12px;
-          border-top: 1px solid rgba(255, 255, 255, 0.1);
+          border-top: 1px solid rgba(59, 130, 246, 0.6);
           background: transparent;
         ">
           <div style="display: flex; gap: 8px;">
@@ -230,23 +294,34 @@
         
       </div>
     `;
-    
+
     shadowRoot.innerHTML = sidebarHTML;
-    
+
     messagesList = shadowRoot.getElementById('messages-container');
     inputField = shadowRoot.getElementById('message-input');
     const sendButton = shadowRoot.getElementById('send-button');
     const countdownButton = shadowRoot.getElementById('countdown-button');
-    
+
     inputField.addEventListener('keypress', (e) => {
       if (e.key === 'Enter') {
         sendMessage();
       }
     });
-    
+
     sendButton.addEventListener('click', sendMessage);
     countdownButton.addEventListener('click', startCountdown);
-    
+
+    // Opacity slider event listener
+    const opacitySlider = shadowRoot.getElementById('opacity-slider');
+    const opacityValue = shadowRoot.getElementById('opacity-value');
+
+    opacitySlider.addEventListener('input', (e) => {
+      backgroundOpacity = parseInt(e.target.value);
+      opacityValue.textContent = `${backgroundOpacity}`;
+      updateBackgroundOpacity();
+      saveToStorage();
+    });
+
     document.documentElement.appendChild(sidebarContainer);
   }
 
@@ -255,7 +330,7 @@
     layoutStyle.setAttribute('data-twpp', 'layout');
     layoutStyle.textContent = `
       body {
-        margin-right: 360px !important;
+        margin-right: 300px !important;
         transition: margin-right 0.3s ease;
       }
     `;
@@ -269,21 +344,52 @@
     }
   }
 
+  function updateBackgroundOpacity() {
+    if (!shadowRoot) return;
+
+    const opacityValue = backgroundOpacity / 100;
+
+    // Update message cards background
+    const messageElements = shadowRoot.querySelectorAll('#messages-container > div');
+    messageElements.forEach((element) => {
+      element.style.background = `rgba(0, 0, 0, ${opacityValue})`;
+    });
+
+    // Update input field background
+    const messageInput = shadowRoot.getElementById('message-input');
+    if (messageInput) {
+      messageInput.style.background = `rgba(0, 0, 0, ${opacityValue * 2})`;
+    }
+
+    // Update button backgrounds
+    const buttons = shadowRoot.querySelectorAll('button');
+    buttons.forEach((button) => {
+      if (button.id === 'countdown-button' || button.id === 'send-button') {
+        const currentBg = button.style.background;
+        if (currentBg.includes('59, 130, 246')) {
+          button.style.background = `rgba(59, 130, 246, ${0.3 + opacityValue * 0.4})`;
+        } else if (currentBg.includes('239, 68, 68')) {
+          button.style.background = `rgba(239, 68, 68, ${0.3 + opacityValue * 0.4})`;
+        }
+      }
+    });
+  }
+
   function renderMessages() {
     if (!messagesList) return;
-    
+
     messagesList.innerHTML = '';
-    
-    messages.forEach(message => {
+
+    messages.forEach((message) => {
       const messageElement = document.createElement('div');
       messageElement.style.cssText = `
         margin-bottom: 8px;
         padding: 8px 12px;
-        background: rgba(0, 0, 0, 0.05);
+        background: rgba(0, 0, 0, ${backgroundOpacity / 100});
         border-radius: 8px;
         border-left: 2px solid rgba(59, 130, 246, 0.5);
       `;
-      
+
       messageElement.innerHTML = `
         <div style="
           font-size: 12px; 
@@ -308,27 +414,27 @@
           ${htmlEscape(message.text)}
         </div>
       `;
-      
+
       messagesList.appendChild(messageElement);
     });
-    
+
     messagesList.scrollTop = messagesList.scrollHeight;
   }
 
   function sendMessage() {
     if (!inputField) return;
-    
+
     const text = inputField.value.trim();
     if (!text) return;
-    
+
     const message = {
       ts: formatTime(),
-      text: text
+      text: text,
     };
-    
+
     messages.push(message);
     inputField.value = '';
-    
+
     renderMessages();
     saveToStorage();
   }
@@ -336,39 +442,39 @@
   function startCountdown() {
     const countdownButton = shadowRoot.getElementById('countdown-button');
     if (!countdownButton) return;
-    
+
     // ボタンを無効化
     countdownButton.disabled = true;
     countdownButton.textContent = 'カウントダウン中...';
     countdownButton.style.opacity = '0.6';
     countdownButton.style.cursor = 'not-allowed';
-    
+
     const countdownMessages = ['5', '4', '3', '2', '1', '再生！'];
     let currentIndex = 0;
-    
+
     const countdownInterval = setInterval(() => {
       if (currentIndex >= countdownMessages.length) {
         clearInterval(countdownInterval);
-        
+
         // ボタンを再有効化してタイマーを開始
         countdownButton.disabled = false;
         countdownButton.style.opacity = '1';
         countdownButton.style.cursor = 'pointer';
-        
+
         // タイマーを開始
         startTimer();
         return;
       }
-      
+
       const message = {
         ts: formatTime(),
-        text: countdownMessages[currentIndex]
+        text: countdownMessages[currentIndex],
       };
-      
+
       messages.push(message);
       renderMessages();
       saveToStorage();
-      
+
       currentIndex++;
     }, 1000);
   }
@@ -377,13 +483,15 @@
     const hours = Math.floor(totalSeconds / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
     const seconds = totalSeconds % 60;
-    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds
+      .toString()
+      .padStart(2, '0')}`;
   }
 
   function updateTimerDisplay() {
     const timerDisplay = shadowRoot.getElementById('timer-display');
     if (!timerDisplay || !isTimerRunning || !timerStartTime) return;
-    
+
     const currentTime = Date.now();
     const elapsedSeconds = Math.floor((currentTime - timerStartTime) / 1000) + timerOffset;
     timerDisplay.textContent = formatTimerDisplay(elapsedSeconds);
@@ -392,7 +500,7 @@
   function setupTimerEventListeners() {
     const pauseButton = shadowRoot.getElementById('pause-button');
     const resetButton = shadowRoot.getElementById('reset-button');
-    
+
     if (pauseButton) {
       pauseButton.addEventListener('click', () => {
         if (isTimerRunning) {
@@ -400,7 +508,7 @@
           const currentTime = Date.now();
           const elapsedSeconds = Math.floor((currentTime - timerStartTime) / 1000) + timerOffset;
           timerOffset = elapsedSeconds;
-          
+
           stopTimer();
           pauseButton.textContent = '▶';
           pauseButton.style.opacity = '0.7';
@@ -410,14 +518,14 @@
           isTimerRunning = true;
           timerInterval = setInterval(updateTimerDisplay, 1000);
           updateTimerDisplay();
-          
+
           pauseButton.textContent = '⏸';
           pauseButton.style.opacity = '1';
           saveToStorage();
         }
       });
     }
-    
+
     if (resetButton) {
       resetButton.addEventListener('click', () => {
         // 完全リセット
@@ -429,15 +537,15 @@
   function resetTimerCompletely() {
     // タイマー停止
     stopTimer();
-    
+
     // タイマー状態をリセット
     timerStartTime = null;
     timerOffset = 0;
     isTimerRunning = false;
-    
+
     // ストレージからタイマー情報を削除
     chrome.storage.local.remove([STORAGE_KEYS.timerStartTime, STORAGE_KEYS.timerOffset]);
-    
+
     // ヘッダーを元の「カウントダウン」ボタンに戻す
     const header = shadowRoot.getElementById('header');
     if (header) {
@@ -456,7 +564,7 @@
           transition: all 0.2s ease;
         ">カウントダウン</button>
       `;
-      
+
       // カウントダウンボタンのイベントリスナーを再設定
       const countdownButton = shadowRoot.getElementById('countdown-button');
       if (countdownButton) {
@@ -467,13 +575,13 @@
 
   function startTimer() {
     if (isTimerRunning) return;
-    
+
     const header = shadowRoot.getElementById('header');
     if (!header) return;
-    
+
     timerStartTime = Date.now();
     isTimerRunning = true;
-    
+
     // ヘッダーUIを3つのコンポーネントに変更
     header.innerHTML = `
       <div id="timer-controls" style="
@@ -523,14 +631,14 @@
         ">↺</button>
       </div>
     `;
-    
+
     // イベントリスナーを再設定
     setupTimerEventListeners();
-    
+
     // タイマーを開始
     timerInterval = setInterval(updateTimerDisplay, 1000);
     updateTimerDisplay();
-    
+
     saveToStorage();
   }
 
@@ -543,10 +651,9 @@
     saveToStorage();
   }
 
-
   function toggleSidebar() {
     isVisible = !isVisible;
-    
+
     if (isVisible) {
       sidebarContainer.style.display = 'block';
       createLayoutStyle();
@@ -554,7 +661,7 @@
       sidebarContainer.style.display = 'none';
       removeLayoutStyle();
     }
-    
+
     saveToStorage();
   }
 
@@ -570,8 +677,22 @@
   async function initialize() {
     await loadFromStorage();
     createSidebar();
+
+    // Initialize opacity slider with saved value
+    const opacitySlider = shadowRoot.getElementById('opacity-slider');
+    const opacityValue = shadowRoot.getElementById('opacity-value');
+    if (opacitySlider && opacityValue) {
+      opacitySlider.value = backgroundOpacity;
+      opacityValue.textContent = `${backgroundOpacity}`;
+    }
+
     renderMessages();
     applySidebarVisibility();
+
+    // Apply initial background opacity
+    setTimeout(() => {
+      updateBackgroundOpacity();
+    }, 100);
   }
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
