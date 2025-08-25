@@ -56,27 +56,45 @@
     shadowRoot = sidebarContainer.attachShadow({ mode: 'closed' });
     
     const sidebarHTML = `
+      <style>
+        #message-input::placeholder {
+          color: rgba(255, 255, 255, 0.5);
+        }
+        #message-input::-webkit-input-placeholder {
+          color: rgba(255, 255, 255, 0.5);
+        }
+        #message-input::-moz-placeholder {
+          color: rgba(255, 255, 255, 0.5);
+          opacity: 1;
+        }
+      </style>
       <div id="sidebar" style="
         position: fixed;
         top: 0;
         right: 0;
         width: 360px;
         height: 100vh;
-        background: #ffffff;
-        border-left: 1px solid #e0e0e0;
+        background: rgba(0, 0, 0, 0.05);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border-left: 1px solid rgba(255, 255, 255, 0.2);
         z-index: 2147483646;
         display: flex;
         flex-direction: column;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         font-size: 14px;
-        box-shadow: -2px 0 8px rgba(0, 0, 0, 0.1);
+        box-shadow: 
+          inset 0 0 20px rgba(255, 255, 255, 0.05),
+          0 0 40px rgba(0, 0, 0, 0.1);
       ">
         <div id="header" style="
-          padding: 16px;
-          border-bottom: 1px solid #e0e0e0;
-          background: #f8f9fa;
+          padding: 8px 12px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+          background: rgba(0, 0, 0, 0.1);
           font-weight: bold;
-          color: #333;
+          color: rgba(255, 255, 255, 0.8);
+          font-size: 12px;
+          text-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
         ">
           Tiny Watch Party
         </div>
@@ -89,25 +107,34 @@
         
         <div id="input-container" style="
           padding: 12px;
-          border-top: 1px solid #e0e0e0;
-          background: #f8f9fa;
+          border-top: 1px solid rgba(255, 255, 255, 0.1);
+          background: rgba(0, 0, 0, 0.1);
+          backdrop-filter: blur(5px);
+          -webkit-backdrop-filter: blur(5px);
         ">
           <div style="display: flex; gap: 8px;">
             <input type="text" id="message-input" placeholder="メッセージを入力..." style="
               flex: 1;
               padding: 8px 12px;
-              border: 1px solid #ccc;
+              border: 1px solid rgba(255, 255, 255, 0.3);
               border-radius: 4px;
               font-size: 14px;
+              background: rgba(0, 0, 0, 0.2);
+              color: rgba(255, 255, 255, 0.95);
+              backdrop-filter: blur(5px);
+              -webkit-backdrop-filter: blur(5px);
             ">
             <button id="send-button" style="
               padding: 8px 16px;
-              background: #007bff;
-              color: white;
-              border: none;
+              background: rgba(59, 130, 246, 0.4);
+              color: rgba(255, 255, 255, 0.95);
+              border: 1px solid rgba(59, 130, 246, 0.6);
               border-radius: 4px;
               cursor: pointer;
               font-size: 14px;
+              backdrop-filter: blur(10px);
+              -webkit-backdrop-filter: blur(10px);
+              text-shadow: 0 0 2px rgba(0, 0, 0, 0.7);
             ">送信</button>
           </div>
         </div>
@@ -161,16 +188,34 @@
       messageElement.style.cssText = `
         margin-bottom: 8px;
         padding: 8px 12px;
-        background: #f1f3f4;
+        background: rgba(0, 0, 0, 0.15);
         border-radius: 8px;
-        border-left: 3px solid #007bff;
+        border-left: 2px solid rgba(59, 130, 246, 0.5);
+        backdrop-filter: blur(3px);
+        -webkit-backdrop-filter: blur(3px);
       `;
       
       messageElement.innerHTML = `
-        <div style="font-size: 12px; color: #666; margin-bottom: 4px;">
+        <div style="
+          font-size: 12px; 
+          color: rgba(255, 255, 255, 0.9); 
+          margin-bottom: 4px;
+          text-shadow: 
+            0 0 3px rgba(0, 0, 0, 0.8),
+            0 0 8px rgba(0, 0, 0, 0.6),
+            1px 1px 2px rgba(0, 0, 0, 0.9);
+        ">
           ${htmlEscape(message.ts)}
         </div>
-        <div style="color: #333; line-height: 1.4;">
+        <div style="
+          color: rgba(255, 255, 255, 0.95); 
+          line-height: 1.4;
+          font-weight: 500;
+          text-shadow: 
+            0 0 4px rgba(0, 0, 0, 0.9),
+            0 0 12px rgba(0, 0, 0, 0.7),
+            2px 2px 4px rgba(0, 0, 0, 0.8);
+        ">
           ${htmlEscape(message.text)}
         </div>
       `;
