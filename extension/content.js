@@ -7,9 +7,17 @@
   let isVisible = false;
   let messages = [];
   
+  // Timer state
+  let timerStartTime = null;
+  let timerInterval = null;
+  let isTimerRunning = false;
+  let timerOffset = 0;
+  
   const STORAGE_KEYS = {
     visible: 'twpp_visible',
-    messages: 'twpp_messages'
+    messages: 'twpp_messages',
+    timerStartTime: 'twpp_timer_start',
+    timerOffset: 'twpp_timer_offset'
   };
 
   let sidebarContainer;
@@ -31,9 +39,87 @@
 
   async function loadFromStorage() {
     try {
-      const result = await chrome.storage.local.get([STORAGE_KEYS.visible, STORAGE_KEYS.messages]);
+      const result = await chrome.storage.local.get([
+        STORAGE_KEYS.visible, 
+        STORAGE_KEYS.messages,
+        STORAGE_KEYS.timerStartTime,
+        STORAGE_KEYS.timerOffset
+      ]);
+      
       isVisible = result[STORAGE_KEYS.visible] || false;
       messages = result[STORAGE_KEYS.messages] || [];
+      
+      // タイマー状態を復元
+      if (result[STORAGE_KEYS.timerStartTime]) {
+        timerStartTime = result[STORAGE_KEYS.timerStartTime];
+        timerOffset = result[STORAGE_KEYS.timerOffset] || 0;
+        
+        // タイマーが設定されている場合はUIを復元
+        setTimeout(() => {
+          const header = shadowRoot?.getElementById('header');
+          if (header) {
+            // ヘッダーをタイマーUIに変更
+            const currentTime = Date.now();
+            const elapsedSeconds = Math.floor((currentTime - timerStartTime) / 1000) + timerOffset;
+            
+            header.innerHTML = `
+              <div id="timer-controls" style="
+                display: flex; 
+                gap: 8px; 
+                align-items: center;
+                width: 100%;
+              ">
+                <div id="timer-display" style="
+                  flex: 1;
+                  font-family: monospace, -apple-system, BlinkMacSystemFont;
+                  font-size: 16px;
+                  font-weight: bold;
+                  color: rgba(255, 255, 255, 0.95);
+                  text-shadow: 0 0 4px rgba(0, 0, 0, 1);
+                  text-align: left;
+                ">${formatTimerDisplay(elapsedSeconds)}</div>
+                <button id="pause-button" style="
+                  width: 40px;
+                  height: 32px;
+                  background: rgba(59, 130, 246, 0.3);
+                  color: rgba(255, 255, 255, 0.95);
+                  border: 1px solid rgba(59, 130, 246, 0.6);
+                  border-radius: 4px;
+                  cursor: pointer;
+                  font-size: 16px;
+                  text-shadow: 0 0 4px rgba(0, 0, 0, 1);
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  transition: all 0.2s ease;
+                ">⏸</button>
+                <button id="reset-button" style="
+                  width: 40px;
+                  height: 32px;
+                  background: rgba(239, 68, 68, 0.3);
+                  color: rgba(255, 255, 255, 0.95);
+                  border: 1px solid rgba(239, 68, 68, 0.6);
+                  border-radius: 4px;
+                  cursor: pointer;
+                  font-size: 16px;
+                  text-shadow: 0 0 4px rgba(0, 0, 0, 1);
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  transition: all 0.2s ease;
+                ">↺</button>
+              </div>
+            `;
+            
+            // イベントリスナーを設定
+            setupTimerEventListeners();
+            
+            // タイマーを再開
+            isTimerRunning = true;
+            timerInterval = setInterval(updateTimerDisplay, 1000);
+          }
+        }, 100);
+      }
     } catch (error) {
       console.error('Storage load error:', error);
     }
@@ -43,7 +129,9 @@
     try {
       await chrome.storage.local.set({
         [STORAGE_KEYS.visible]: isVisible,
-        [STORAGE_KEYS.messages]: messages
+        [STORAGE_KEYS.messages]: messages,
+        [STORAGE_KEYS.timerStartTime]: timerStartTime,
+        [STORAGE_KEYS.timerOffset]: timerOffset
       });
     } catch (error) {
       console.error('Storage save error:', error);
@@ -262,11 +350,13 @@
       if (currentIndex >= countdownMessages.length) {
         clearInterval(countdownInterval);
         
-        // ボタンを再有効化
+        // ボタンを再有効化してタイマーを開始
         countdownButton.disabled = false;
-        countdownButton.textContent = 'カウントダウン';
         countdownButton.style.opacity = '1';
         countdownButton.style.cursor = 'pointer';
+        
+        // タイマーを開始
+        startTimer();
         return;
       }
       
@@ -282,6 +372,177 @@
       currentIndex++;
     }, 1000);
   }
+
+  function formatTimerDisplay(totalSeconds) {
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  }
+
+  function updateTimerDisplay() {
+    const timerDisplay = shadowRoot.getElementById('timer-display');
+    if (!timerDisplay || !isTimerRunning || !timerStartTime) return;
+    
+    const currentTime = Date.now();
+    const elapsedSeconds = Math.floor((currentTime - timerStartTime) / 1000) + timerOffset;
+    timerDisplay.textContent = formatTimerDisplay(elapsedSeconds);
+  }
+
+  function setupTimerEventListeners() {
+    const pauseButton = shadowRoot.getElementById('pause-button');
+    const resetButton = shadowRoot.getElementById('reset-button');
+    
+    if (pauseButton) {
+      pauseButton.addEventListener('click', () => {
+        if (isTimerRunning) {
+          // 一時停止
+          const currentTime = Date.now();
+          const elapsedSeconds = Math.floor((currentTime - timerStartTime) / 1000) + timerOffset;
+          timerOffset = elapsedSeconds;
+          
+          stopTimer();
+          pauseButton.textContent = '▶';
+          pauseButton.style.opacity = '0.7';
+        } else {
+          // 再開
+          timerStartTime = Date.now();
+          isTimerRunning = true;
+          timerInterval = setInterval(updateTimerDisplay, 1000);
+          updateTimerDisplay();
+          
+          pauseButton.textContent = '⏸';
+          pauseButton.style.opacity = '1';
+          saveToStorage();
+        }
+      });
+    }
+    
+    if (resetButton) {
+      resetButton.addEventListener('click', () => {
+        // 完全リセット
+        resetTimerCompletely();
+      });
+    }
+  }
+
+  function resetTimerCompletely() {
+    // タイマー停止
+    stopTimer();
+    
+    // タイマー状態をリセット
+    timerStartTime = null;
+    timerOffset = 0;
+    isTimerRunning = false;
+    
+    // ストレージからタイマー情報を削除
+    chrome.storage.local.remove([STORAGE_KEYS.timerStartTime, STORAGE_KEYS.timerOffset]);
+    
+    // ヘッダーを元の「カウントダウン」ボタンに戻す
+    const header = shadowRoot.getElementById('header');
+    if (header) {
+      header.innerHTML = `
+        <button id="countdown-button" style="
+          width: 100%;
+          padding: 8px 12px;
+          background: rgba(59, 130, 246, 0.3);
+          color: rgba(255, 255, 255, 0.95);
+          border: 1px solid rgba(59, 130, 246, 0.6);
+          border-radius: 4px;
+          cursor: pointer;
+          font-size: 14px;
+          font-weight: bold;
+          text-shadow: 0 0 4px rgba(0, 0, 0, 1);
+          transition: all 0.2s ease;
+        ">カウントダウン</button>
+      `;
+      
+      // カウントダウンボタンのイベントリスナーを再設定
+      const countdownButton = shadowRoot.getElementById('countdown-button');
+      if (countdownButton) {
+        countdownButton.addEventListener('click', startCountdown);
+      }
+    }
+  }
+
+  function startTimer() {
+    if (isTimerRunning) return;
+    
+    const header = shadowRoot.getElementById('header');
+    if (!header) return;
+    
+    timerStartTime = Date.now();
+    isTimerRunning = true;
+    
+    // ヘッダーUIを3つのコンポーネントに変更
+    header.innerHTML = `
+      <div id="timer-controls" style="
+        display: flex; 
+        gap: 8px; 
+        align-items: center;
+        width: 100%;
+      ">
+        <div id="timer-display" style="
+          flex: 1;
+          font-family: monospace, -apple-system, BlinkMacSystemFont;
+          font-size: 16px;
+          font-weight: bold;
+          color: rgba(255, 255, 255, 0.95);
+          text-shadow: 0 0 4px rgba(0, 0, 0, 1);
+          text-align: left;
+        ">00:00:00</div>
+        <button id="pause-button" style="
+          width: 40px;
+          height: 32px;
+          background: rgba(59, 130, 246, 0.3);
+          color: rgba(255, 255, 255, 0.95);
+          border: 1px solid rgba(59, 130, 246, 0.6);
+          border-radius: 4px;
+          cursor: pointer;
+          font-size: 16px;
+          text-shadow: 0 0 4px rgba(0, 0, 0, 1);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.2s ease;
+        ">⏸</button>
+        <button id="reset-button" style="
+          width: 40px;
+          height: 32px;
+          background: rgba(239, 68, 68, 0.3);
+          color: rgba(255, 255, 255, 0.95);
+          border: 1px solid rgba(239, 68, 68, 0.6);
+          border-radius: 4px;
+          cursor: pointer;
+          font-size: 16px;
+          text-shadow: 0 0 4px rgba(0, 0, 0, 1);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.2s ease;
+        ">↺</button>
+      </div>
+    `;
+    
+    // イベントリスナーを再設定
+    setupTimerEventListeners();
+    
+    // タイマーを開始
+    timerInterval = setInterval(updateTimerDisplay, 1000);
+    updateTimerDisplay();
+    
+    saveToStorage();
+  }
+
+  function stopTimer() {
+    if (timerInterval) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+    isTimerRunning = false;
+    saveToStorage();
+  }
+
 
   function toggleSidebar() {
     isVisible = !isVisible;
