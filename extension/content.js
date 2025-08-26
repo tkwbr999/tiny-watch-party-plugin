@@ -302,13 +302,16 @@
     const sendButton = shadowRoot.getElementById('send-button');
     const countdownButton = shadowRoot.getElementById('countdown-button');
 
-    inputField.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') {
-        sendMessage();
-      }
-    });
+    // Enhanced key event control for input field
+    setupInputEventListeners();
 
-    sendButton.addEventListener('click', sendMessage);
+    // Enhanced send button event control
+    sendButton.addEventListener('click', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      sendMessage();
+      inputField.focus(); // Maintain focus on input field
+    });
     countdownButton.addEventListener('click', startCountdown);
 
     // Opacity slider event listener
@@ -421,6 +424,78 @@
     messagesList.scrollTop = messagesList.scrollHeight;
   }
 
+  function setupInputEventListeners() {
+    if (!inputField) return;
+
+    // Block key events that might interfere with video players
+    function blockKeyEvent(e) {
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+    }
+
+    // Enhanced keydown handler with complete event control
+    inputField.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      
+      // Prevent spacebar from affecting video player
+      if (e.key === ' ' || e.key === 'Spacebar') {
+        e.preventDefault();
+      }
+      
+      // Handle Enter key for sending messages
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        sendMessage();
+      }
+    }, true);
+
+    // Block keyup events
+    inputField.addEventListener('keyup', (e) => {
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+    }, true);
+
+    // Enhanced keypress handler
+    inputField.addEventListener('keypress', (e) => {
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        // Already handled in keydown
+      }
+    }, true);
+
+    // Focus management to isolate input completely
+    inputField.addEventListener('focus', (e) => {
+      // Add global event blockers when input is focused
+      document.addEventListener('keydown', globalKeyBlocker, true);
+      document.addEventListener('keyup', globalKeyBlocker, true);
+      document.addEventListener('keypress', globalKeyBlocker, true);
+    });
+
+    inputField.addEventListener('blur', (e) => {
+      // Remove global event blockers when input loses focus
+      document.removeEventListener('keydown', globalKeyBlocker, true);
+      document.removeEventListener('keyup', globalKeyBlocker, true);
+      document.removeEventListener('keypress', globalKeyBlocker, true);
+    });
+
+    // Global key event blocker for when input is focused
+    function globalKeyBlocker(e) {
+      if (shadowRoot && shadowRoot.activeElement === inputField) {
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        
+        // Allow normal typing but block video shortcuts
+        if (e.key === ' ' || e.key === 'Spacebar') {
+          e.preventDefault();
+        }
+      }
+    }
+  }
+
   function sendMessage() {
     if (!inputField) return;
 
@@ -437,6 +512,9 @@
 
     renderMessages();
     saveToStorage();
+    
+    // Keep focus on input field after sending
+    inputField.focus();
   }
 
   function startCountdown() {
