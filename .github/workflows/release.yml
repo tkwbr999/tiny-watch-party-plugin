@@ -1,0 +1,85 @@
+name: Release Chrome Extension
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+      
+    - name: Run validation
+      run: make validate
+      
+    - name: Run tests
+      run: make test
+
+  build-and-release:
+    needs: test
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+      
+    - name: Build packages
+      run: make all-packs
+      
+    - name: Get version
+      id: version
+      run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+      
+    - name: Create Release
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # タグ名から 'refs/tags/' プレフィックスを削除
+        TAG_NAME=${GITHUB_REF#refs/tags/}
+        
+        # 開発用パッケージをZIP化
+        cd releases
+        zip -r "tiny-watch-party-v${{ steps.version.outputs.VERSION }}-dev.zip" "tiny-watch-party-v${{ steps.version.outputs.VERSION }}-dev/"
+        cd ..
+        
+        # リリース作成
+        gh release create $TAG_NAME \
+          --title "Tiny Watch Party v${{ steps.version.outputs.VERSION }}" \
+          --notes "# Tiny Watch Party v${{ steps.version.outputs.VERSION }}
+        
+        ## 🎉 新機能・改善点
+        - Chrome拡張機能のアップデート
+        
+        ## 📦 ダウンロード
+        - **Chrome Web Store用**: \`tiny-watch-party-store.zip\`
+        - **開発用（未圧縮）**: \`tiny-watch-party-v${{ steps.version.outputs.VERSION }}-dev.zip\`
+        - **一般配布用**: \`tiny-watch-party-v${{ steps.version.outputs.VERSION }}.zip\`
+        
+        ## 🔧 インストール方法
+        1. ZIPファイルをダウンロード
+        2. Chrome拡張機能ページ（\`chrome://extensions/\`）を開く
+        3. 開発者モードを有効にする
+        4. 「パッケージ化されていない拡張機能を読み込む」をクリック
+        5. 解凍したフォルダを選択" \
+          ./releases/tiny-watch-party-store.zip \
+          ./releases/tiny-watch-party-v${{ steps.version.outputs.VERSION }}.zip \
+          ./releases/tiny-watch-party-v${{ steps.version.outputs.VERSION }}-dev.zip

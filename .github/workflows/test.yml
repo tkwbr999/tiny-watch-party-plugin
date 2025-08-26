@@ -1,0 +1,50 @@
+name: Test Chrome Extension
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+      
+    - name: Run validation
+      run: make validate
+      
+    - name: Run tests
+      run: make test
+      
+    - name: Test build process
+      run: |
+        make clean
+        make pack
+        
+    - name: Check package contents
+      run: |
+        cd releases
+        unzip -l *.zip
+        
+    - name: Validate package size
+      run: |
+        cd releases
+        for file in *.zip; do
+          SIZE=$(stat -c%s "$file")
+          if [ $SIZE -gt 52428800 ]; then
+            echo "❌ パッケージサイズが50MBを超えています: $file ${SIZE} bytes"
+            exit 1
+          else
+            echo "✅ パッケージサイズOK: $file ${SIZE} bytes"
+          fi
+        done
