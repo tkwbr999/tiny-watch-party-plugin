@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -53,8 +54,12 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # タグ名から 'refs/tags/' プレフィックスを削除
-        TAG_NAME=${GITHUB_REF#refs/tags/}
+        # タグ名を決定（手動実行時は v{VERSION}、タグpush時はそのタグ）
+        if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          TAG_NAME="v${{ steps.version.outputs.VERSION }}"
+        else
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+        fi
         
         # 開発用パッケージをZIP化
         cd releases
