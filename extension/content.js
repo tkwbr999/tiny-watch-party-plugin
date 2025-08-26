@@ -163,6 +163,21 @@
           color: rgba(255, 255, 255, 0.5);
           opacity: 1;
         }
+        
+        .timer-segment {
+          display: inline-block;
+          min-width: 24px;
+          text-align: center;
+          transition: all 0.2s ease;
+          user-select: none;
+          cursor: ns-resize;
+        }
+        
+        .timer-segment:hover {
+          background: rgba(59, 130, 246, 0.2);
+          border-radius: 3px;
+          padding: 0 2px;
+        }
       </style>
       <div id="sidebar" style="
         position: fixed;
@@ -188,22 +203,6 @@
           border-bottom: 1px solid rgba(59, 130, 246, 0.6);
           background: transparent;
         ">
-          <div style="
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 12px;
-            color: rgba(255, 255, 255, 0.8);
-            margin-bottom: 6px;
-          ">
-            <span style="text-shadow: 0 0 3px rgba(0, 0, 0, 1);">透明度</span>
-            <span id="opacity-value" style="
-              font-family: monospace;
-              text-shadow: 0 0 3px rgba(0, 0, 0, 1);
-              min-width: 30px;
-              text-align: right;
-            ">5</span>
-          </div>
           <input type="range" id="opacity-slider" min="0" max="100" value="5" style="
             width: 100%;
             height: 4px;
@@ -316,11 +315,9 @@
 
     // Opacity slider event listener
     const opacitySlider = shadowRoot.getElementById('opacity-slider');
-    const opacityValue = shadowRoot.getElementById('opacity-value');
-
+    
     opacitySlider.addEventListener('input', (e) => {
       backgroundOpacity = parseInt(e.target.value);
-      opacityValue.textContent = `${backgroundOpacity}`;
       updateBackgroundOpacity();
       saveToStorage();
     });
@@ -566,6 +563,14 @@
       .padStart(2, '0')}`;
   }
 
+  function createEditableTimerDisplay(totalSeconds) {
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    
+    return `<span id="timer-hours" class="timer-segment" data-unit="hours">${hours.toString().padStart(2, '0')}</span>:<span id="timer-minutes" class="timer-segment" data-unit="minutes">${minutes.toString().padStart(2, '0')}</span>:<span id="timer-seconds" class="timer-segment" data-unit="seconds">${seconds.toString().padStart(2, '0')}</span>`;
+  }
+
   function updateTimerDisplay() {
     const timerDisplay = shadowRoot.getElementById('timer-display');
     if (!timerDisplay || !isTimerRunning || !timerStartTime) return;
@@ -573,6 +578,68 @@
     const currentTime = Date.now();
     const elapsedSeconds = Math.floor((currentTime - timerStartTime) / 1000) + timerOffset;
     timerDisplay.textContent = formatTimerDisplay(elapsedSeconds);
+  }
+
+  function adjustTimerValue(unit, change) {
+    // 現在の総秒数を取得
+    let totalSeconds = timerOffset;
+    
+    // 単位ごとに値を調整
+    if (unit === 'seconds') {
+      totalSeconds += change;
+    } else if (unit === 'minutes') {
+      totalSeconds += change * 60;
+    } else if (unit === 'hours') {
+      totalSeconds += change * 3600;
+    }
+    
+    // 負の値を防ぐ
+    if (totalSeconds < 0) {
+      totalSeconds = 0;
+    }
+    
+    // 新しいtimerOffsetを設定
+    timerOffset = totalSeconds;
+    
+    // 表示を更新
+    updateEditableTimerDisplay();
+    
+    // ストレージに保存
+    saveToStorage();
+  }
+
+  function updateEditableTimerDisplay() {
+    const timerDisplay = shadowRoot.getElementById('timer-display');
+    if (!timerDisplay || isTimerRunning) return;
+
+    // 編集可能な表示に更新
+    timerDisplay.innerHTML = createEditableTimerDisplay(timerOffset);
+    setupTimerEditHandlers();
+  }
+
+  function setupTimerEditHandlers() {
+    const segments = shadowRoot.querySelectorAll('.timer-segment');
+    
+    segments.forEach(segment => {
+      // Remove any existing event listeners to prevent duplicates
+      segment.replaceWith(segment.cloneNode(true));
+    });
+    
+    // Re-select after cloning
+    const newSegments = shadowRoot.querySelectorAll('.timer-segment');
+    
+    newSegments.forEach(segment => {
+      segment.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const unit = segment.dataset.unit;
+        const increment = e.deltaY < 0 ? 1 : -1;
+        const multiplier = e.shiftKey ? 10 : 1;
+        
+        adjustTimerValue(unit, increment * multiplier);
+      }, { passive: false });
+    });
   }
 
   function setupTimerEventListeners() {
@@ -590,6 +657,9 @@
           stopTimer();
           pauseButton.textContent = '▶';
           pauseButton.style.opacity = '0.7';
+          
+          // 編集可能モードに切り替え
+          updateEditableTimerDisplay();
         } else {
           // 再開
           timerStartTime = Date.now();
@@ -758,10 +828,8 @@
 
     // Initialize opacity slider with saved value
     const opacitySlider = shadowRoot.getElementById('opacity-slider');
-    const opacityValue = shadowRoot.getElementById('opacity-value');
-    if (opacitySlider && opacityValue) {
+    if (opacitySlider) {
       opacitySlider.value = backgroundOpacity;
-      opacityValue.textContent = `${backgroundOpacity}`;
     }
 
     renderMessages();
