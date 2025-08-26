@@ -269,7 +269,7 @@
           background: transparent;
         ">
           <div style="display: flex; gap: 8px;">
-            <input type="text" id="message-input" placeholder="メッセージを入力..." style="
+            <input type="text" id="message-input" placeholder="メッセージ (Ctrl/Cmd+Enter または Shift+Enter で送信)" style="
               flex: 1;
               padding: 8px 12px;
               border: 1px solid rgba(255, 255, 255, 0.3);
@@ -423,85 +423,88 @@
 
   function setupInputEventListeners() {
     if (!inputField) return;
-
-    // Block key events that might interfere with video players
-    function blockKeyEvent(e) {
+    
+    console.log('[TWPP] Setting up simplified keyboard handlers');
+    
+    // シンプルで確実なキーボードハンドラー - キャプチャフェーズ
+    inputField.addEventListener('keydown', (e) => {
+      console.log(`[TWPP] Keydown: ${e.key}, Ctrl: ${e.ctrlKey}, Meta: ${e.metaKey}, Shift: ${e.shiftKey}, Composing: ${e.isComposing}`);
+      
+      // 全てのキーイベントを即座にブロック（ビデオプレーヤー分離）
       e.stopPropagation();
       e.stopImmediatePropagation();
-    }
-
-    // Enhanced keydown handler with complete event control
+      
+      // Cmd+Enter / Ctrl+Enter / Shift+Enter での送信
+      if (e.key === 'Enter' && !e.isComposing) {
+        if (e.metaKey || e.ctrlKey || e.shiftKey) {
+          console.log('[TWPP] Modifier+Enter detected, sending message');
+          e.preventDefault();
+          const text = inputField.value.trim();
+          if (text) {
+            sendMessage();
+          }
+          return false;
+        }
+        // 単純なEnterは無視（改行防止）
+        console.log('[TWPP] Plain Enter blocked');
+        e.preventDefault();
+        return false;
+      }
+      
+      // ビデオプレイヤーのショートカットをブロック
+      const videoShortcuts = [' ', 'k', 'j', 'l', 'm', 'f', 'c', 't', 'i'];
+      if (videoShortcuts.includes(e.key.toLowerCase())) {
+        e.preventDefault();
+      }
+    }, true);
+    
+    // バブルフェーズでも同じハンドラーを設定（Mac互換性のため）
     inputField.addEventListener('keydown', (e) => {
       e.stopPropagation();
       e.stopImmediatePropagation();
       
-      // Prevent spacebar from affecting video player
-      if (e.key === ' ' || e.key === 'Spacebar') {
+      if (e.key === 'Enter' && !e.isComposing && (e.metaKey || e.ctrlKey || e.shiftKey)) {
+        console.log('[TWPP] Bubble phase: Modifier+Enter detected');
         e.preventDefault();
+        const text = inputField.value.trim();
+        if (text) {
+          sendMessage();
+        }
+        return false;
       }
-      
-      // Handle Enter key for sending messages
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        sendMessage();
-      }
-    }, true);
-
-    // Block keyup events
+    }, false);
+    
+    // keyup and keypress events for complete isolation
     inputField.addEventListener('keyup', (e) => {
       e.stopPropagation();
       e.stopImmediatePropagation();
     }, true);
-
-    // Enhanced keypress handler
+    
     inputField.addEventListener('keypress', (e) => {
       e.stopPropagation();
       e.stopImmediatePropagation();
-      
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        // Already handled in keydown
-      }
     }, true);
-
-    // Focus management to isolate input completely
-    inputField.addEventListener('focus', (e) => {
-      // Add global event blockers when input is focused
-      document.addEventListener('keydown', globalKeyBlocker, true);
-      document.addEventListener('keyup', globalKeyBlocker, true);
-      document.addEventListener('keypress', globalKeyBlocker, true);
-    });
-
-    inputField.addEventListener('blur', (e) => {
-      // Remove global event blockers when input loses focus
-      document.removeEventListener('keydown', globalKeyBlocker, true);
-      document.removeEventListener('keyup', globalKeyBlocker, true);
-      document.removeEventListener('keypress', globalKeyBlocker, true);
-    });
-
-    // Global key event blocker for when input is focused
-    function globalKeyBlocker(e) {
-      if (shadowRoot && shadowRoot.activeElement === inputField) {
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-        
-        // Allow normal typing but block video shortcuts
-        if (e.key === ' ' || e.key === 'Spacebar') {
-          e.preventDefault();
-        }
-      }
-    }
   }
 
   function sendMessage() {
-    if (!inputField) return;
+    console.log('[TWPP] sendMessage() called');
+    
+    if (!inputField) {
+      console.log('[TWPP] No input field');
+      return;
+    }
 
     const text = inputField.value.trim();
-    if (!text) return;
+    console.log(`[TWPP] Message text: "${text}"`);
+    
+    if (!text) {
+      console.log('[TWPP] Empty message, not sending');
+      return;
+    }
 
     const message = {
       ts: formatTime(),
-      text: text,
+      text: text
     };
 
     messages.push(message);
@@ -509,6 +512,8 @@
 
     renderMessages();
     saveToStorage();
+    
+    console.log('[TWPP] Message sent successfully');
     
     // Keep focus on input field after sending
     inputField.focus();
