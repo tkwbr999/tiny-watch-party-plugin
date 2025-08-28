@@ -6,14 +6,23 @@ out
 dist
 *.tgz
 
+# Wrangler build files
+.wrangler/
+wrangler-dist/
+worker-configuration.d.ts
+
 # code coverage
 coverage
 *.lcov
 
 # logs
 logs
-_.log
-report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
+*.log
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Test artifacts
+test-results/
+/tmp/tiny-watch-party-tests-*
 
 # dotenv environment variable files
 .env
@@ -26,6 +35,23 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .eslintcache
 .cache
 *.tsbuildinfo
+
+# TypeScript
+*.tsbuildinfo
+.tsc-cache/
+
+# ESLint
+.eslintcache
+
+# Prettier
+.prettiercache
+
+# Tailwind CSS
+.tailwindcss-cache/
+
+# Linting and formatting
+.lint-staged-cache/
+.stylelintcache
 
 # IntelliJ based IDEs
 .idea

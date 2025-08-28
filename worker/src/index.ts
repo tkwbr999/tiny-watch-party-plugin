@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { logger } from 'hono/logger'
+import { generateRoomId, generateHostToken, validateRoomId, RuntimeDetector } from './utils/room'
 
 // Bun開発環境とCloudflare Workers両対応の型定義
 type Bindings = {
@@ -26,29 +27,30 @@ app.use('*', cors({
 
 // ルートエンドポイント
 app.get('/', (c) => {
-  const runtime = typeof Bun !== 'undefined' ? 'bun' : 'cloudflare-workers'
   return c.json({
     service: 'Tiny Watch Party WebSocket Server',
-    runtime,
+    runtime: RuntimeDetector.current,
     environment: c.env?.ENVIRONMENT || 'development',
     timestamp: new Date().toISOString(),
     endpoints: {
       health: '/health',
-      status: '/status'
+      status: '/status',
+      perf: '/perf',
+      roomCreate: '/api/rooms/create',
+      roomValidate: '/api/rooms/{roomId}/validate'
     },
     performance: {
-      note: runtime === 'bun' ? 'Running on Bun - Ultra Fast!' : 'Running on Cloudflare Workers - Edge Optimized!'
+      note: RuntimeDetector.getPerformanceNote()
     }
   })
 })
 
 // ヘルスチェック with パフォーマンス情報
 app.get('/health', (c) => {
-  const runtime = typeof Bun !== 'undefined' ? 'bun' : 'cloudflare-workers'
   return c.json({
     status: 'healthy',
     service: 'tiny-watch-party-worker',
-    runtime,
+    runtime: RuntimeDetector.current,
     environment: c.env?.ENVIRONMENT || 'development',
     timestamp: new Date().toISOString(),
     uptime: Date.now(),
@@ -58,36 +60,34 @@ app.get('/health', (c) => {
       honoFramework: '✅',
       typeScript: '✅',
       cors: '✅',
-      performance: '✅'
+      performance: '✅',
+      roomManagement: '✅'
     }
   })
 })
 
 // ステータス詳細エンドポイント
 app.get('/status', (c) => {
-  const headers = Object.fromEntries(c.req.header())
   const url = new URL(c.req.url)
-  const runtime = typeof Bun !== 'undefined' ? 'bun' : 'cloudflare-workers'
   
   return c.json({
     status: 'operational',
     timestamp: new Date().toISOString(),
-    runtime,
+    runtime: RuntimeDetector.current,
     environment: c.env?.ENVIRONMENT || 'development',
     request: {
       method: c.req.method,
       url: url.toString(),
-      headers: headers,
       userAgent: c.req.header('User-Agent') || 'unknown'
     },
     worker: {
-      region: c.req.cf?.colo || 'local',
-      country: c.req.cf?.country || 'local',
+      region: (c.req as any).cf?.colo || 'local',
+      country: (c.req as any).cf?.country || 'local',
       ip: c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || 'localhost'
     },
     performance: {
-      runtime,
-      note: runtime === 'bun' ? 'Local development with hot reload' : 'Edge deployment with global distribution'
+      runtime: RuntimeDetector.current,
+      note: RuntimeDetector.getPerformanceNote()
     }
   })
 })
@@ -101,10 +101,9 @@ app.get('/perf', async (c) => {
   const processed = data.filter(item => item.value > 0.5).map(item => ({ ...item, processed: true }))
   
   const end = performance.now()
-  const runtime = typeof Bun !== 'undefined' ? 'bun' : 'cloudflare-workers'
   
   return c.json({
-    runtime,
+    runtime: RuntimeDetector.current,
     processingTime: `${end - start}ms`,
     dataProcessed: {
       total: data.length,
@@ -114,13 +113,81 @@ app.get('/perf', async (c) => {
   })
 })
 
+// ルーム作成API
+app.post('/api/rooms/create', async (c) => {
+  const roomId = generateRoomId()
+  const hostToken = generateHostToken()
+  const createdAt = new Date()
+  const expiresAt = new Date(createdAt.getTime() + 3 * 60 * 60 * 1000) // 3時間後
+  
+  // レスポンスヘッダー設定
+  c.header('X-Room-Id', roomId)
+  c.header('X-Host-Token', hostToken)
+  
+  const host = c.req.header('host') || 'localhost:3000'
+  const protocol = host.includes('localhost') ? 'ws://' : 'wss://'
+  
+  return c.json({
+    roomId,
+    createdAt: createdAt.toISOString(),
+    expiresAt: expiresAt.toISOString(),
+    hostToken,
+    websocketUrl: `${protocol}${host}/ws/${roomId}`,
+    shareUrl: `https://tiny-watch-party.example.com/join/${roomId}`,
+    management: {
+      validateUrl: `/api/rooms/${roomId}/validate`,
+      maxParticipants: 10,
+      autoExpire: true
+    }
+  }, 201)
+})
+
+// ルーム情報取得・バリデーション
+app.get('/api/rooms/:roomId/validate', (c) => {
+  const roomId = c.req.param('roomId')
+  const isValid = validateRoomId(roomId)
+  
+  return c.json({
+    roomId,
+    valid: isValid,
+    message: isValid ? 'Valid room ID format' : 'Invalid room ID format',
+    format: 'XXXX-YYYY-ZZZZ (12 characters, A-Z and 0-9)',
+    example: 'A3F2-8K9L-4MN7'
+  })
+})
+
+// ルーム一覧（デモ用）
+app.get('/api/rooms', (c) => {
+  // 実際の実装ではデータベースから取得
+  const demoRooms = [
+    {
+      roomId: generateRoomId(),
+      status: 'active',
+      participants: Math.floor(Math.random() * 5) + 1,
+      createdAt: new Date(Date.now() - Math.random() * 3600000).toISOString()
+    },
+    {
+      roomId: generateRoomId(),
+      status: 'active', 
+      participants: Math.floor(Math.random() * 3) + 1,
+      createdAt: new Date(Date.now() - Math.random() * 3600000).toISOString()
+    }
+  ]
+  
+  return c.json({
+    rooms: demoRooms,
+    total: demoRooms.length,
+    note: 'This is demo data. Real implementation would use database.'
+  })
+})
+
 // 404ハンドラー
 app.notFound((c) => {
   return c.json({
     error: 'Not Found',
     message: 'The requested endpoint does not exist.',
     timestamp: new Date().toISOString(),
-    availableEndpoints: ['/', '/health', '/status', '/perf']
+    availableEndpoints: ['/', '/health', '/status', '/perf', 'POST /api/rooms/create', '/api/rooms', '/api/rooms/{roomId}/validate']
   }, 404)
 })
 
