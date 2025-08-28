@@ -10,6 +10,7 @@
   let windowPositionX = null;
   let windowPositionY = null;
   let currentColorTheme = 'neon'; // Default to neon blue
+  let currentBgMode = 'dark'; // Default to dark mode ('dark' or 'light')
 
   // Timer state
   let timerStartTime = null;
@@ -24,6 +25,7 @@
     timerOffset: 'twpp_timer_offset',
     backgroundOpacity: 'twpp_background_opacity',
     colorTheme: 'twpp_color_theme',
+    bgMode: 'twpp_bg_mode',
   };
 
   // カラーテーマ定義
@@ -105,6 +107,7 @@
         STORAGE_KEYS.timerOffset,
         STORAGE_KEYS.backgroundOpacity,
         STORAGE_KEYS.colorTheme,
+        STORAGE_KEYS.bgMode,
       ]);
 
       isVisible = result[STORAGE_KEYS.visible] || false;
@@ -115,6 +118,7 @@
           : 5;
       
       currentColorTheme = result[STORAGE_KEYS.colorTheme] || 'neon';
+      currentBgMode = result[STORAGE_KEYS.bgMode] || 'dark';
       
 
       // タイマー状態を復元
@@ -202,6 +206,7 @@
         [STORAGE_KEYS.timerOffset]: timerOffset,
         [STORAGE_KEYS.backgroundOpacity]: backgroundOpacity,
         [STORAGE_KEYS.colorTheme]: currentColorTheme,
+        [STORAGE_KEYS.bgMode]: currentBgMode,
       });
     } catch (error) {
       console.error('Storage save error:', error);
@@ -302,8 +307,28 @@
           background: transparent;
         ">
           <div style="display: flex; align-items: center; gap: 12px;">
+            <!-- 背景モード切り替えボタン -->
+            <div id="bg-mode-toggle" style="
+              display: flex;
+              align-items: center;
+              gap: 4px;
+            ">
+              <button id="bg-mode-btn" style="
+                width: 24px; height: 24px;
+                border-radius: 4px;
+                border: 1px solid rgba(255, 255, 255, 0.3);
+                background: transparent;
+                cursor: pointer;
+                font-size: 16px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                transition: all 0.2s ease;
+              " title="モード切り替え">🌙</button>
+            </div>
+            
             <input type="range" id="opacity-slider" min="0" max="100" value="5" style="
-              width: 70%;
+              width: 60%;
               height: 4px;
               background: rgba(255, 255, 255, 0.2);
               border-radius: 2px;
@@ -382,6 +407,10 @@
               border: 2px solid rgba(255, 255, 255, 0.9);
               box-shadow: 0 0 6px rgba(255, 255, 255, 0.4);
             }
+            #bg-mode-btn:hover {
+              background: rgba(255, 255, 255, 0.1);
+              border: 2px solid rgba(255, 255, 255, 0.5);
+            }
           </style>
         </div>
         
@@ -457,10 +486,12 @@
     setupDragFunctionality();
     setupWindowResizeHandler();
     setupColorPickerEvents();
+    setupBgModeEvents();
     
-    // 初回起動時にテーマを適用
+    // 初回起動時にテーマと背景モードを適用
     applyColorTheme(currentColorTheme);
     updateColorButtonSelection(currentColorTheme);
+    applyBgMode(currentBgMode);
 
     // Enhanced send button event control
     sendButton.addEventListener('click', (e) => {
@@ -621,6 +652,77 @@
     });
   }
 
+  function applyBgMode(mode) {
+    const sidebar = shadowRoot.getElementById('sidebar');
+    if (!sidebar) return;
+    
+    // まず現在のモードを更新
+    currentBgMode = mode;
+    
+    if (mode === 'light') {
+      // ライトモード：白背景
+      sidebar.style.background = `rgba(255, 255, 255, ${backgroundOpacity / 100})`;
+      
+      // テキストカラーを調整
+      updateTextColorsForLightMode();
+    } else {
+      // ダークモード：黒背景（デフォルト）
+      sidebar.style.background = `rgba(0, 0, 0, ${backgroundOpacity / 100})`;
+      
+      // テキストカラーを調整
+      updateTextColorsForDarkMode();
+    }
+    
+    // モード更新後にボタンのアイコンとタイトルを更新
+    updateBgModeButtonDisplay();
+    
+    console.log('[TWPP] Background mode changed to:', mode);
+  }
+
+  function updateBgModeButtonDisplay() {
+    const bgModeBtn = shadowRoot.getElementById('bg-mode-btn');
+    if (!bgModeBtn) return;
+    
+    if (currentBgMode === 'dark') {
+      // ダークモード（黒背景）時は月を表示
+      bgModeBtn.textContent = '🌙';
+      bgModeBtn.title = 'ライトモードに切り替え';
+    } else {
+      // ライトモード（白背景）時は太陽を表示
+      bgModeBtn.textContent = '☀️';
+      bgModeBtn.title = 'ダークモードに切り替え';
+    }
+  }
+
+  function updateTextColorsForLightMode() {
+    // タイトルバーのテキスト色
+    const titleBar = shadowRoot.getElementById('title-bar');
+    if (titleBar) {
+      titleBar.style.color = 'rgba(0, 0, 0, 0.9)';
+      titleBar.style.textShadow = '0 0 4px rgba(255, 255, 255, 0.8)';
+    }
+
+    // メッセージのテキスト色とタイマー表示を更新
+    updateMessagesColorMode('light');
+  }
+
+  function updateTextColorsForDarkMode() {
+    // タイトルバーのテキスト色
+    const titleBar = shadowRoot.getElementById('title-bar');
+    if (titleBar) {
+      titleBar.style.color = 'rgba(255, 255, 255, 0.9)';
+      titleBar.style.textShadow = '0 0 4px rgba(0, 0, 0, 0.8)';
+    }
+
+    // メッセージのテキスト色とタイマー表示を更新
+    updateMessagesColorMode('dark');
+  }
+
+  function updateMessagesColorMode(mode) {
+    // 既存のメッセージの背景色とテキスト色を更新
+    renderMessages(); // メッセージを再レンダリングして色を適用
+  }
+
   function adjustModalPositionOnResize() {
     const sidebar = shadowRoot.getElementById('sidebar');
     if (!sidebar) return;
@@ -638,12 +740,15 @@
   function updateBackgroundOpacity() {
     if (!shadowRoot) return;
 
-    const opacityValue = backgroundOpacity / 100;
     const sidebar = shadowRoot.getElementById('sidebar');
     
     if (sidebar) {
-      // モーダル全体の背景透明度を更新（ボーダーはそのまま）
-      sidebar.style.background = `rgba(0, 0, 0, ${opacityValue})`;
+      // 現在の背景モードに応じて背景色を設定
+      if (currentBgMode === 'light') {
+        sidebar.style.background = `rgba(255, 255, 255, ${backgroundOpacity / 100})`;
+      } else {
+        sidebar.style.background = `rgba(0, 0, 0, ${backgroundOpacity / 100})`;
+      }
     }
   }
 
@@ -655,10 +760,11 @@
     messages.forEach((message) => {
       const messageElement = document.createElement('div');
       messageElement.className = 'message-item';
+      const messageBg = currentBgMode === 'light' ? 'rgba(0, 0, 0, 0.05)' : 'rgba(255, 255, 255, 0.05)';
       messageElement.style.cssText = `
         margin-bottom: 8px;
         padding: 8px 12px;
-        background: rgba(255, 255, 255, 0.05);
+        background: ${messageBg};
         border-radius: 8px;
         border-left: 2px solid ${COLOR_THEMES[currentColorTheme].messageBorder};
       `;
@@ -666,23 +772,17 @@
       messageElement.innerHTML = `
         <div style="
           font-size: 12px; 
-          color: rgba(255, 255, 255, 0.9); 
+          color: ${currentBgMode === 'light' ? 'rgba(0, 0, 0, 0.8)' : 'rgba(255, 255, 255, 0.9)'}; 
           margin-bottom: 4px;
-          text-shadow: 
-            0 0 5px rgba(0, 0, 0, 1),
-            0 0 10px rgba(0, 0, 0, 0.9),
-            2px 2px 3px rgba(0, 0, 0, 1);
+          text-shadow: ${currentBgMode === 'light' ? '0 0 3px rgba(255, 255, 255, 0.8)' : '0 0 5px rgba(0, 0, 0, 1), 0 0 10px rgba(0, 0, 0, 0.9), 2px 2px 3px rgba(0, 0, 0, 1)'};
         ">
           ${htmlEscape(message.ts)}
         </div>
         <div style="
-          color: rgba(255, 255, 255, 0.95); 
+          color: ${currentBgMode === 'light' ? 'rgba(0, 0, 0, 0.9)' : 'rgba(255, 255, 255, 0.95)'}; 
           line-height: 1.4;
           font-weight: 500;
-          text-shadow: 
-            0 0 6px rgba(0, 0, 0, 1),
-            0 0 15px rgba(0, 0, 0, 0.9),
-            3px 3px 5px rgba(0, 0, 0, 1);
+          text-shadow: ${currentBgMode === 'light' ? '0 0 3px rgba(255, 255, 255, 0.8)' : '0 0 6px rgba(0, 0, 0, 1), 0 0 15px rgba(0, 0, 0, 0.9), 3px 3px 5px rgba(0, 0, 0, 1)'};
         ">
           ${htmlEscape(message.text)}
         </div>
@@ -837,6 +937,26 @@
     titleBar.addEventListener('touchstart', startDrag, { passive: false });
     document.addEventListener('touchmove', doDrag, { passive: false });
     document.addEventListener('touchend', stopDrag);
+  }
+
+  function setupBgModeEvents() {
+    const bgModeBtn = shadowRoot.getElementById('bg-mode-btn');
+
+    if (bgModeBtn) {
+      bgModeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        
+        // 現在のモードと逆のモードに切り替え
+        const newMode = currentBgMode === 'dark' ? 'light' : 'dark';
+        applyBgMode(newMode);
+        saveToStorage();
+        
+        console.log('[TWPP] Switched to', newMode, 'mode');
+      });
+    }
+    
+    console.log('[TWPP] Background mode events setup completed');
   }
 
   function setupColorPickerEvents() {
