@@ -22,8 +22,6 @@
     timerStartTime: 'twpp_timer_start',
     timerOffset: 'twpp_timer_offset',
     backgroundOpacity: 'twpp_background_opacity',
-    positionX: 'twpp_position_x',
-    positionY: 'twpp_position_y',
   };
 
   let sidebarContainer;
@@ -50,8 +48,6 @@
         STORAGE_KEYS.timerStartTime,
         STORAGE_KEYS.timerOffset,
         STORAGE_KEYS.backgroundOpacity,
-        STORAGE_KEYS.positionX,
-        STORAGE_KEYS.positionY,
       ]);
 
       isVisible = result[STORAGE_KEYS.visible] || false;
@@ -61,8 +57,6 @@
           ? result[STORAGE_KEYS.backgroundOpacity]
           : 5;
       
-      windowPositionX = result[STORAGE_KEYS.positionX];
-      windowPositionY = result[STORAGE_KEYS.positionY];
 
       // タイマー状態を復元
       if (result[STORAGE_KEYS.timerStartTime]) {
@@ -148,8 +142,6 @@
         [STORAGE_KEYS.timerStartTime]: timerStartTime,
         [STORAGE_KEYS.timerOffset]: timerOffset,
         [STORAGE_KEYS.backgroundOpacity]: backgroundOpacity,
-        [STORAGE_KEYS.positionX]: windowPositionX,
-        [STORAGE_KEYS.positionY]: windowPositionY,
       });
     } catch (error) {
       console.error('Storage save error:', error);
@@ -191,8 +183,8 @@
       </style>
       <div id="sidebar" style="
         position: fixed;
-        top: ${windowPositionY || 130}px;
-        left: ${windowPositionX || (window.innerWidth - 320)}px;
+        top: ${getInitialPositionY()}px;
+        left: ${getInitialPositionX()}px;
         width: 300px;
         height: calc(100vh - 280px);
         background: rgba(0, 0, 0, ${backgroundOpacity / 100});
@@ -350,6 +342,7 @@
     // Enhanced key event control for input field
     setupInputEventListeners();
     setupDragFunctionality();
+    setupWindowResizeHandler();
 
     // Enhanced send button event control
     sendButton.addEventListener('click', (e) => {
@@ -373,6 +366,30 @@
   }
 
   // モーダル化によりlayoutStyle機能は不要
+
+  function getInitialPositionX() {
+    // 常に右端から20pxの余白を確保
+    return Math.max(20, window.innerWidth - 320);
+  }
+
+  function getInitialPositionY() {
+    // 上から130pxの固定位置
+    return 130;
+  }
+
+  function adjustModalPositionOnResize() {
+    const sidebar = shadowRoot.getElementById('sidebar');
+    if (!sidebar) return;
+    
+    // 常に右端に再配置
+    const newLeft = getInitialPositionX();
+    const newTop = getInitialPositionY();
+    
+    sidebar.style.left = `${newLeft}px`;
+    sidebar.style.top = `${newTop}px`;
+    
+    console.log('[TWPP] Modal repositioned to right edge due to window resize');
+  }
 
   function updateBackgroundOpacity() {
     if (!shadowRoot) return;
@@ -563,8 +580,7 @@
       titleBar.style.cursor = 'move';
       document.body.style.userSelect = '';
       
-      // 位置をストレージに保存
-      saveToStorage();
+      // 位置の保存は削除（一時的な移動のみ）
     }
     
     // マウスイベント
@@ -576,6 +592,19 @@
     titleBar.addEventListener('touchstart', startDrag, { passive: false });
     document.addEventListener('touchmove', doDrag, { passive: false });
     document.addEventListener('touchend', stopDrag);
+  }
+
+  function setupWindowResizeHandler() {
+    let resizeDebounceTimer;
+    
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeDebounceTimer);
+      resizeDebounceTimer = setTimeout(() => {
+        adjustModalPositionOnResize();
+      }, 150); // 150msの遅延でデバウンス処理
+    });
+    
+    console.log('[TWPP] Window resize handler setup completed');
   }
 
   function sendMessage() {
