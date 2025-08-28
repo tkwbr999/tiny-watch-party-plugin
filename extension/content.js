@@ -2,6 +2,72 @@
   if (window.__twpp_injected) {
     return;
   }
+
+  // ウィンドウタイプ検出：ポップアップ/モーダルの場合は初期化をスキップ
+  function isMainWindow() {
+    // 1. window.opener がある場合はポップアップウィンドウと判定
+    if (window.opener) {
+      console.log('[TWPP] Skipping: Window has opener (popup window)');
+      return false;
+    }
+
+    // 2. 認証系URLパターンをチェック
+    const authPatterns = [
+      /\/auth\//i,
+      /\/oauth\//i,
+      /\/login\//i,
+      /\/signin\//i,
+      /\/sso\//i,
+      /\/callback\//i,
+      /accounts\.google\.com/i,
+      /login\.microsoftonline\.com/i,
+      /github\.com\/login/i,
+      /twitter\.com\/oauth/i,
+      /facebook\.com\/dialog/i,
+      /discord\.com\/api\/oauth/i
+    ];
+
+    const currentUrl = window.location.href;
+    for (const pattern of authPatterns) {
+      if (pattern.test(currentUrl)) {
+        console.log('[TWPP] Skipping: Authentication URL detected -', currentUrl);
+        return false;
+      }
+    }
+
+    // 3. window.name に特定の文字列が含まれる場合は除外
+    if (window.name) {
+      const excludeNames = ['auth', 'popup', 'modal', 'oauth', 'login'];
+      const windowName = window.name.toLowerCase();
+      for (const name of excludeNames) {
+        if (windowName.includes(name)) {
+          console.log('[TWPP] Skipping: Window name contains excluded term -', window.name);
+          return false;
+        }
+      }
+    }
+
+    // 4. ウィンドウサイズが小さすぎる場合は除外（一般的な認証ポップアップサイズ）
+    if (window.innerWidth < 600 || window.innerHeight < 400) {
+      console.log('[TWPP] Skipping: Window too small -', window.innerWidth, 'x', window.innerHeight);
+      return false;
+    }
+
+    // 5. 親フレームがある場合（iframe内）は除外
+    if (window.parent !== window) {
+      console.log('[TWPP] Skipping: Running in iframe');
+      return false;
+    }
+
+    console.log('[TWPP] Main window detected - proceeding with initialization');
+    return true;
+  }
+
+  // メインウィンドウでない場合は初期化をスキップ
+  if (!isMainWindow()) {
+    return;
+  }
+
   window.__twpp_injected = true;
 
   let isVisible = false;
