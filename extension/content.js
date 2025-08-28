@@ -9,6 +9,7 @@
   let backgroundOpacity = 5; // Default 5% opacity
   let windowPositionX = null;
   let windowPositionY = null;
+  let currentColorTheme = 'neon'; // Default to neon blue
 
   // Timer state
   let timerStartTime = null;
@@ -22,6 +23,61 @@
     timerStartTime: 'twpp_timer_start',
     timerOffset: 'twpp_timer_offset',
     backgroundOpacity: 'twpp_background_opacity',
+    colorTheme: 'twpp_color_theme',
+  };
+
+  // カラーテーマ定義
+  const COLOR_THEMES = {
+    neon: {
+      name: 'Neon Blue',
+      border: 'rgba(3, 44, 112, 0.8)',
+      buttonBg: 'rgba(3, 44, 112, 0.5)',
+      accent: 'rgb(3, 44, 112)',
+      titleBg: 'rgba(3, 44, 112, 0.15)',
+      messageBorder: 'rgba(3, 44, 112, 0.6)',
+      sliderThumb: 'rgba(3, 44, 112, 0.9)',
+      timerHover: 'rgba(3, 44, 112, 0.3)',
+    },
+    purple: {
+      name: 'Purple',
+      border: 'rgba(147, 51, 234, 0.8)',
+      buttonBg: 'rgba(147, 51, 234, 0.5)',
+      accent: 'rgb(147, 51, 234)',
+      titleBg: 'rgba(147, 51, 234, 0.15)',
+      messageBorder: 'rgba(147, 51, 234, 0.6)',
+      sliderThumb: 'rgba(147, 51, 234, 0.9)',
+      timerHover: 'rgba(147, 51, 234, 0.3)',
+    },
+    pink: {
+      name: 'Pink',
+      border: 'rgba(236, 72, 153, 0.8)',
+      buttonBg: 'rgba(236, 72, 153, 0.5)',
+      accent: 'rgb(236, 72, 153)',
+      titleBg: 'rgba(236, 72, 153, 0.15)',
+      messageBorder: 'rgba(236, 72, 153, 0.6)',
+      sliderThumb: 'rgba(236, 72, 153, 0.9)',
+      timerHover: 'rgba(236, 72, 153, 0.3)',
+    },
+    orange: {
+      name: 'Orange',
+      border: 'rgba(251, 146, 60, 0.8)',
+      buttonBg: 'rgba(251, 146, 60, 0.5)',
+      accent: 'rgb(251, 146, 60)',
+      titleBg: 'rgba(251, 146, 60, 0.15)',
+      messageBorder: 'rgba(251, 146, 60, 0.6)',
+      sliderThumb: 'rgba(251, 146, 60, 0.9)',
+      timerHover: 'rgba(251, 146, 60, 0.3)',
+    },
+    green: {
+      name: 'Green',
+      border: 'rgba(34, 197, 94, 0.8)',
+      buttonBg: 'rgba(34, 197, 94, 0.5)',
+      accent: 'rgb(34, 197, 94)',
+      titleBg: 'rgba(34, 197, 94, 0.15)',
+      messageBorder: 'rgba(34, 197, 94, 0.6)',
+      sliderThumb: 'rgba(34, 197, 94, 0.9)',
+      timerHover: 'rgba(34, 197, 94, 0.3)',
+    }
   };
 
   let sidebarContainer;
@@ -48,6 +104,7 @@
         STORAGE_KEYS.timerStartTime,
         STORAGE_KEYS.timerOffset,
         STORAGE_KEYS.backgroundOpacity,
+        STORAGE_KEYS.colorTheme,
       ]);
 
       isVisible = result[STORAGE_KEYS.visible] || false;
@@ -56,6 +113,8 @@
         result[STORAGE_KEYS.backgroundOpacity] !== undefined
           ? result[STORAGE_KEYS.backgroundOpacity]
           : 5;
+      
+      currentColorTheme = result[STORAGE_KEYS.colorTheme] || 'neon';
       
 
       // タイマー状態を復元
@@ -142,6 +201,7 @@
         [STORAGE_KEYS.timerStartTime]: timerStartTime,
         [STORAGE_KEYS.timerOffset]: timerOffset,
         [STORAGE_KEYS.backgroundOpacity]: backgroundOpacity,
+        [STORAGE_KEYS.colorTheme]: currentColorTheme,
       });
     } catch (error) {
       console.error('Storage save error:', error);
@@ -241,15 +301,60 @@
           border-bottom: 1px solid rgba(59, 130, 246, 0.6);
           background: transparent;
         ">
-          <input type="range" id="opacity-slider" min="0" max="100" value="5" style="
-            width: 100%;
-            height: 4px;
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 2px;
-            outline: none;
-            -webkit-appearance: none;
-            cursor: pointer;
-          ">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <input type="range" id="opacity-slider" min="0" max="100" value="5" style="
+              width: 70%;
+              height: 4px;
+              background: rgba(255, 255, 255, 0.2);
+              border-radius: 2px;
+              outline: none;
+              -webkit-appearance: none;
+              cursor: pointer;
+            ">
+            
+            <div id="color-picker" style="display: flex; gap: 4px;">
+              <button class="color-btn" data-color="neon" style="
+                width: 16px; height: 16px;
+                border-radius: 50%;
+                border: 1px solid rgba(255, 255, 255, 0.3);
+                background: rgb(3, 44, 112);
+                cursor: pointer;
+                transition: all 0.2s ease;
+              "></button>
+              <button class="color-btn" data-color="purple" style="
+                width: 16px; height: 16px;
+                border-radius: 50%;
+                border: 1px solid rgba(255, 255, 255, 0.3);
+                background: rgb(147, 51, 234);
+                cursor: pointer;
+                transition: all 0.2s ease;
+              "></button>
+              <button class="color-btn" data-color="pink" style="
+                width: 16px; height: 16px;
+                border-radius: 50%;
+                border: 1px solid rgba(255, 255, 255, 0.3);
+                background: rgb(236, 72, 153);
+                cursor: pointer;
+                transition: all 0.2s ease;
+              "></button>
+              <button class="color-btn" data-color="orange" style="
+                width: 16px; height: 16px;
+                border-radius: 50%;
+                border: 1px solid rgba(255, 255, 255, 0.3);
+                background: rgb(251, 146, 60);
+                cursor: pointer;
+                transition: all 0.2s ease;
+              "></button>
+              <button class="color-btn" data-color="green" style="
+                width: 16px; height: 16px;
+                border-radius: 50%;
+                border: 1px solid rgba(255, 255, 255, 0.3);
+                background: rgb(34, 197, 94);
+                cursor: pointer;
+                transition: all 0.2s ease;
+              "></button>
+            </div>
+          </div>
           <style>
             #opacity-slider::-webkit-slider-thumb {
               -webkit-appearance: none;
@@ -268,6 +373,14 @@
               cursor: pointer;
               border: none;
               box-shadow: 0 0 4px rgba(0, 0, 0, 0.3);
+            }
+            .color-btn:hover {
+              transform: scale(1.2);
+              border: 2px solid rgba(255, 255, 255, 0.6);
+            }
+            .color-btn.active {
+              border: 2px solid rgba(255, 255, 255, 0.9);
+              box-shadow: 0 0 6px rgba(255, 255, 255, 0.4);
             }
           </style>
         </div>
@@ -310,7 +423,7 @@
             <input type="text" id="message-input" placeholder="メッセージ (Ctrl/Cmd+Enter または Shift+Enter で送信)" style="
               flex: 1;
               padding: 8px 12px;
-              border: 1px solid rgba(255, 255, 255, 0.3);
+              border: 1px solid ${COLOR_THEMES[currentColorTheme].border};
               border-radius: 4px;
               font-size: 14px;
               background: rgba(0, 0, 0, 0.2);
@@ -343,6 +456,11 @@
     setupInputEventListeners();
     setupDragFunctionality();
     setupWindowResizeHandler();
+    setupColorPickerEvents();
+    
+    // 初回起動時にテーマを適用
+    applyColorTheme(currentColorTheme);
+    updateColorButtonSelection(currentColorTheme);
 
     // Enhanced send button event control
     sendButton.addEventListener('click', (e) => {
@@ -375,6 +493,132 @@
   function getInitialPositionY() {
     // 上から130pxの固定位置
     return 130;
+  }
+
+  function applyColorTheme(themeName) {
+    const theme = COLOR_THEMES[themeName];
+    if (!theme) {
+      console.warn('[TWPP] Unknown color theme:', themeName);
+      return;
+    }
+
+    const sidebar = shadowRoot.getElementById('sidebar');
+    if (!sidebar) return;
+
+    // モーダルボーダー
+    sidebar.style.borderColor = theme.border;
+
+    // タイトルバー
+    const titleBar = shadowRoot.getElementById('title-bar');
+    if (titleBar) {
+      titleBar.style.background = theme.titleBg;
+      titleBar.style.borderBottomColor = theme.border;
+    }
+
+    // 透明度コントロール下線
+    const opacityControl = shadowRoot.getElementById('opacity-control');
+    if (opacityControl) {
+      opacityControl.style.borderBottomColor = theme.border;
+    }
+
+    // ヘッダー下線
+    const header = shadowRoot.getElementById('header');
+    if (header) {
+      header.style.borderBottomColor = theme.border;
+    }
+
+    // カウントダウンボタン
+    const countdownButton = shadowRoot.getElementById('countdown-button');
+    if (countdownButton) {
+      countdownButton.style.background = theme.buttonBg;
+      countdownButton.style.borderColor = theme.border;
+    }
+
+    // メッセージエリアボーダー
+    const messagesContainer = shadowRoot.getElementById('messages-container');
+    if (messagesContainer) {
+      messagesContainer.style.borderTopColor = theme.border;
+      messagesContainer.style.borderBottomColor = theme.border;
+    }
+
+    // 入力エリア上線
+    const inputContainer = shadowRoot.getElementById('input-container');
+    if (inputContainer) {
+      inputContainer.style.borderTopColor = theme.border;
+    }
+
+    // 送信ボタン
+    const sendButton = shadowRoot.getElementById('send-button');
+    if (sendButton) {
+      sendButton.style.background = theme.buttonBg;
+      sendButton.style.borderColor = theme.border;
+    }
+
+    // メッセージ入力フィールド
+    const messageInput = shadowRoot.getElementById('message-input');
+    if (messageInput) {
+      messageInput.style.borderColor = theme.border;
+    }
+
+    // スライダーのつまみ色を更新
+    const style = shadowRoot.querySelector('style');
+    if (style) {
+      let styleContent = style.textContent;
+      styleContent = styleContent.replace(
+        /#opacity-slider::-webkit-slider-thumb[\s\S]*?background: [^;]+;/,
+        `#opacity-slider::-webkit-slider-thumb {
+              -webkit-appearance: none;
+              width: 16px;
+              height: 16px;
+              background: ${theme.sliderThumb};`
+      );
+      styleContent = styleContent.replace(
+        /#opacity-slider::-moz-range-thumb[\s\S]*?background: [^;]+;/,
+        `#opacity-slider::-moz-range-thumb {
+              width: 16px;
+              height: 16px;
+              background: ${theme.sliderThumb};`
+      );
+      
+      // タイマーホバー効果も更新
+      if (styleContent.includes('.timer-segment:hover')) {
+        styleContent = styleContent.replace(
+          /\.timer-segment:hover[\s\S]*?background: [^;]+;/,
+          `.timer-segment:hover {
+            background: ${theme.timerHover};`
+        );
+      }
+      
+      style.textContent = styleContent;
+    }
+
+    // メッセージの左側ボーダーを更新
+    const messageItems = shadowRoot.querySelectorAll('.message-item');
+    messageItems.forEach(item => {
+      item.style.borderLeftColor = theme.messageBorder;
+    });
+
+    // タイマー編集ボタンがあれば更新
+    const editButtons = shadowRoot.querySelectorAll('.edit-timer-button');
+    editButtons.forEach(button => {
+      button.style.background = theme.buttonBg;
+      button.style.borderColor = theme.border;
+    });
+
+    currentColorTheme = themeName;
+    console.log('[TWPP] Color theme applied:', themeName);
+  }
+
+  function updateColorButtonSelection(activeTheme) {
+    const colorButtons = shadowRoot.querySelectorAll('.color-btn');
+    colorButtons.forEach(button => {
+      const buttonTheme = button.getAttribute('data-color');
+      if (buttonTheme === activeTheme) {
+        button.classList.add('active');
+      } else {
+        button.classList.remove('active');
+      }
+    });
   }
 
   function adjustModalPositionOnResize() {
@@ -410,12 +654,13 @@
 
     messages.forEach((message) => {
       const messageElement = document.createElement('div');
+      messageElement.className = 'message-item';
       messageElement.style.cssText = `
         margin-bottom: 8px;
         padding: 8px 12px;
         background: rgba(255, 255, 255, 0.05);
         border-radius: 8px;
-        border-left: 2px solid rgba(59, 130, 246, 0.5);
+        border-left: 2px solid ${COLOR_THEMES[currentColorTheme].messageBorder};
       `;
 
       messageElement.innerHTML = `
@@ -592,6 +837,33 @@
     titleBar.addEventListener('touchstart', startDrag, { passive: false });
     document.addEventListener('touchmove', doDrag, { passive: false });
     document.addEventListener('touchend', stopDrag);
+  }
+
+  function setupColorPickerEvents() {
+    const colorButtons = shadowRoot.querySelectorAll('.color-btn');
+    colorButtons.forEach(button => {
+      button.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        
+        const selectedTheme = button.getAttribute('data-color');
+        if (selectedTheme && COLOR_THEMES[selectedTheme]) {
+          applyColorTheme(selectedTheme);
+          updateColorButtonSelection(selectedTheme);
+          saveToStorage();
+          
+          console.log('[TWPP] Color theme changed to:', selectedTheme);
+        }
+      });
+      
+      // ホバー効果のためのイベント（CSSで処理するが、ログ用）
+      button.addEventListener('mouseenter', () => {
+        const themeName = button.getAttribute('data-color');
+        console.log('[TWPP] Hovering over color:', themeName);
+      });
+    });
+    
+    console.log('[TWPP] Color picker events setup completed');
   }
 
   function setupWindowResizeHandler() {
