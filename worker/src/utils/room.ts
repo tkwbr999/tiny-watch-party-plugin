@@ -5,7 +5,7 @@
 // ルームID生成ユーティリティ関数
 export function generateRoomId(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-  const segments = []
+  const segments: string[] = []
   
   for (let i = 0; i < 3; i++) {
     let segment = ''

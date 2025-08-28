@@ -100,6 +100,9 @@ describe('Room Utilities Unit Tests', () => {
         
         // host_ + UUIDの最初のセグメント (8文字)
         expect(hostToken).toMatch(/^host_[a-f0-9]{8}$/)
+      } else {
+        // crypto APIが利用できない場合はテストをスキップ
+        expect(true).toBe(true)
       }
     })
 

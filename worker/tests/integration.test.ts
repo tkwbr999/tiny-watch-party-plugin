@@ -3,7 +3,9 @@
  * URL: https://tiny-watch-party-worker.kickintheholdings.workers.dev
  */
 
-const BASE_URL = process.env.DEV_BASE_URL
+import { describe, test, expect } from 'bun:test'
+
+const BASE_URL = Bun.env.DEV_BASE_URL
 
 if (!BASE_URL) {
   throw new Error('DEV_BASE_URL environment variable is required. Please set it in your .env file.')

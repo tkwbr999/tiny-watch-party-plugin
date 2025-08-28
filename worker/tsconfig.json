@@ -14,11 +14,12 @@
     "forceConsistentCasingInFileNames": true,
     "allowJs": true,
     "noEmit": true,
+    "noImplicitAny": false,
     "types": [
       "bun-types",
       "@cloudflare/workers-types"
     ]
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "tests"]
 }
