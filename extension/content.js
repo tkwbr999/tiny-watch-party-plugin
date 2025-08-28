@@ -195,7 +195,7 @@
         left: ${windowPositionX || (window.innerWidth - 320)}px;
         width: 300px;
         height: calc(100vh - 280px);
-        background: transparent;
+        background: rgba(0, 0, 0, ${backgroundOpacity / 100});
         border: 1px solid rgba(59, 130, 246, 0.6);
         border-radius: 8px;
         z-index: 2147483646;
@@ -289,7 +289,7 @@
           <button id="countdown-button" style="
             width: 100%;
             padding: 8px 12px;
-            background: rgba(59, 130, 246, 0.3);
+            background: rgba(59, 130, 246, 0.4);
             color: rgba(255, 255, 255, 0.95);
             border: 1px solid rgba(59, 130, 246, 0.6);
             border-radius: 4px;
@@ -321,12 +321,12 @@
               border: 1px solid rgba(255, 255, 255, 0.3);
               border-radius: 4px;
               font-size: 14px;
-              background: rgba(0, 0, 0, 0.1);
+              background: rgba(0, 0, 0, 0.2);
               color: rgba(255, 255, 255, 0.95);
             ">
             <button id="send-button" style="
               padding: 8px 16px;
-              background: rgba(59, 130, 246, 0.3);
+              background: rgba(59, 130, 246, 0.4);
               color: rgba(255, 255, 255, 0.95);
               border: 1px solid rgba(59, 130, 246, 0.6);
               border-radius: 4px;
@@ -378,31 +378,12 @@
     if (!shadowRoot) return;
 
     const opacityValue = backgroundOpacity / 100;
-
-    // Update message cards background
-    const messageElements = shadowRoot.querySelectorAll('#messages-container > div');
-    messageElements.forEach((element) => {
-      element.style.background = `rgba(0, 0, 0, ${opacityValue})`;
-    });
-
-    // Update input field background
-    const messageInput = shadowRoot.getElementById('message-input');
-    if (messageInput) {
-      messageInput.style.background = `rgba(0, 0, 0, ${opacityValue * 2})`;
+    const sidebar = shadowRoot.getElementById('sidebar');
+    
+    if (sidebar) {
+      // モーダル全体の背景透明度を更新（ボーダーはそのまま）
+      sidebar.style.background = `rgba(0, 0, 0, ${opacityValue})`;
     }
-
-    // Update button backgrounds
-    const buttons = shadowRoot.querySelectorAll('button');
-    buttons.forEach((button) => {
-      if (button.id === 'countdown-button' || button.id === 'send-button') {
-        const currentBg = button.style.background;
-        if (currentBg.includes('59, 130, 246')) {
-          button.style.background = `rgba(59, 130, 246, ${0.3 + opacityValue * 0.4})`;
-        } else if (currentBg.includes('239, 68, 68')) {
-          button.style.background = `rgba(239, 68, 68, ${0.3 + opacityValue * 0.4})`;
-        }
-      }
-    });
   }
 
   function renderMessages() {
@@ -415,7 +396,7 @@
       messageElement.style.cssText = `
         margin-bottom: 8px;
         padding: 8px 12px;
-        background: rgba(0, 0, 0, ${backgroundOpacity / 100});
+        background: rgba(255, 255, 255, 0.05);
         border-radius: 8px;
         border-left: 2px solid rgba(59, 130, 246, 0.5);
       `;
