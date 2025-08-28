@@ -1,0 +1,19 @@
+#:schema node_modules/wrangler/config-schema.json
+name = "tiny-watch-party-worker"
+main = "src/index.ts"
+compatibility_date = "2024-08-28"
+compatibility_flags = ["nodejs_compat"]
+
+# 開発環境用変数
+[vars]
+ENVIRONMENT = "development"
+
+# ステージング環境
+[env.staging]
+name = "tiny-watch-party-worker-staging"
+vars = { ENVIRONMENT = "staging" }
+
+# 本番環境
+[env.production]
+name = "tiny-watch-party-worker-prod"
+vars = { ENVIRONMENT = "production" }

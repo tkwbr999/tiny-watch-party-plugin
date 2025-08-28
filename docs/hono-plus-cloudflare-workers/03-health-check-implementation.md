@@ -149,9 +149,9 @@ export interface ErrorResponse {
 #!/bin/bash
 
 # 設定
-BASE_URL=${1:-"http://localhost:8787"}
+BASE_URL=${1:-"http://localhost:3000"}
 
-echo "Testing endpoints on: $BASE_URL"
+echo "Testing endpoints on: $BASE_URL (Bun server)"
 echo "=================================="
 
 # ルートエンドポイント
@@ -220,11 +220,15 @@ testWorkerEndpoints().then(result => {
 ### 1. ローカル開発
 
 ```bash
-# 開発サーバー起動
-npm run dev
+# Bun開発サーバー起動（ホットリロード）
+bun run dev
 
 # 別ターミナルでテスト実行
 chmod +x scripts/test-endpoints.sh
+./scripts/test-endpoints.sh http://localhost:3000
+
+# Wranglerでのテストも可能
+bun run dev:wrangler
 ./scripts/test-endpoints.sh http://localhost:8787
 ```
 
@@ -232,7 +236,7 @@ chmod +x scripts/test-endpoints.sh
 
 ```bash
 # ステージング環境にデプロイ
-npm run deploy:staging
+bun run deploy:staging
 
 # デプロイされたURLでテスト
 ./scripts/test-endpoints.sh https://tiny-watch-party-worker-staging.your-subdomain.workers.dev
@@ -242,7 +246,7 @@ npm run deploy:staging
 
 ```bash
 # 本番環境にデプロイ
-npm run deploy:prod
+bun run deploy:prod
 
 # 本番URLでテスト
 ./scripts/test-endpoints.sh https://tiny-watch-party-worker-prod.your-subdomain.workers.dev
@@ -254,10 +258,10 @@ npm run deploy:prod
 
 ```bash
 # 開発環境のログ
-npx wrangler tail
+bunx wrangler tail
 
 # 本番環境のログ
-npx wrangler tail --env production
+bunx wrangler tail --env production
 ```
 
 ### Cloudflare Dashboard

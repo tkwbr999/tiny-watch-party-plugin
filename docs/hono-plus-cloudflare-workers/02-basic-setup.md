@@ -9,23 +9,22 @@ mkdir worker
 cd worker
 ```
 
-### 2. npm プロジェクト初期化
+### 2. Bun プロジェクト初期化
 
 ```bash
-npm init -y
+bun init -y
 ```
 
 ### 3. 依存関係インストール
 
 ```bash
 # 本体
-npm install hono
+bun add hono
 
 # 開発ツール
-npm install -D wrangler @cloudflare/workers-types typescript
+bun add -d wrangler @cloudflare/workers-types
 
-# TypeScript設定（オプション）
-npm install -D @types/node
+# BunはネイティブでTypeScriptをサポート（追加パッケージ不要）
 ```
 
 ## 設定ファイル作成
@@ -38,15 +37,16 @@ npm install -D @types/node
   "version": "1.0.0",
   "main": "src/index.ts",
   "scripts": {
-    "dev": "wrangler dev",
+    "dev": "bun run --hot src/index.ts",
+    "dev:wrangler": "wrangler dev",
     "deploy": "wrangler deploy",
     "deploy:staging": "wrangler deploy --env staging",
     "deploy:prod": "wrangler deploy --env production",
-    "type-check": "tsc --noEmit"
+    "type-check": "bun run tsc --noEmit",
+    "test": "bun test"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20231218.0",
-    "typescript": "^5.3.0",
     "wrangler": "^3.22.0"
   },
   "dependencies": {
@@ -55,22 +55,28 @@ npm install -D @types/node
 }
 ```
 
-### tsconfig.json
+### tsconfig.json (Bun最適化版)
 
 ```json
 {
   "compilerOptions": {
-    "target": "ES2022",
-    "lib": ["ES2022"],
+    "lib": ["ESNext"],
     "module": "ESNext",
+    "target": "ESNext",
     "moduleResolution": "bundler",
-    "allowSyntheticDefaultImports": true,
-    "esModuleInterop": true,
-    "allowJs": true,
+    "moduleDetection": "force",
+    "allowImportingTsExtensions": true,
     "strict": true,
+    "downlevelIteration": true,
     "skipLibCheck": true,
+    "jsx": "react-jsx",
+    "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
-    "types": ["@cloudflare/workers-types"]
+    "allowJs": true,
+    "types": [
+      "bun-types",
+      "@cloudflare/workers-types"
+    ]
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules"]
@@ -121,6 +127,7 @@ worker/
 
 ```gitignore
 node_modules/
+bun.lockb
 dist/
 .wrangler/
 .dev.vars*
@@ -160,38 +167,44 @@ DEBUG=false
 ### 1. Wranglerログイン
 
 ```bash
-npx wrangler login
+bunx wrangler login
 ```
 
 ### 2. アカウント確認
 
 ```bash
-npx wrangler whoami
+bunx wrangler whoami
 ```
 
 ## 基本コマンド
 
 ```bash
-# ローカル開発サーバー起動
-npm run dev
+# Bunローカル開発サーバー起動（ホットリロード）
+bun run dev
+
+# Wranglerローカル開発サーバー起動
+bun run dev:wrangler
 
 # 型チェック
-npm run type-check
+bun run type-check
+
+# テスト実行
+bun test
 
 # デプロイ（開発環境）
-npm run deploy
+bun run deploy
 
 # デプロイ（ステージング）
-npm run deploy:staging
+bun run deploy:staging
 
 # デプロイ（本番）
-npm run deploy:prod
+bun run deploy:prod
 
 # ログ確認
-npx wrangler tail
+bunx wrangler tail
 
 # デプロイ済みWorker一覧
-npx wrangler list
+bunx wrangler list
 ```
 
 ## トラブルシューティング
@@ -200,21 +213,22 @@ npx wrangler list
 
 1. **wrangler: command not found**
    ```bash
-   npx wrangler --version
+   bunx wrangler --version
    ```
 
 2. **認証エラー**
    ```bash
-   npx wrangler login
+   bunx wrangler login
    ```
 
 3. **TypeScriptエラー**
    ```bash
-   npm run type-check
+   bun run type-check
    ```
 
 ### デバッグ方法
 
-- `console.log()` は Wrangler の開発サーバーで確認可能
-- 本番環境では `npx wrangler tail` でリアルタイムログ確認
+- `console.log()` は Bun または Wrangler の開発サーバーで確認可能
+- 本番環境では `bunx wrangler tail` でリアルタイムログ確認
 - Cloudflare Dashboard の Analytics でリクエスト状況を監視
+- Bunの高速リロード機能により開発効率が大幅に向上
