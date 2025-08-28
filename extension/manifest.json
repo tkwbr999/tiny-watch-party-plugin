@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Tiny Watch Party - Sidebar MVP",
-  "version": "0.0.14",
+  "version": "0.0.15",
   "description": "小さなコミュニティでのウォッチパーティプラグイン",
   "permissions": [
     "storage"
