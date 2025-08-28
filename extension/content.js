@@ -7,6 +7,8 @@
   let isVisible = false;
   let messages = [];
   let backgroundOpacity = 5; // Default 5% opacity
+  let windowPositionX = null;
+  let windowPositionY = null;
 
   // Timer state
   let timerStartTime = null;
@@ -20,13 +22,14 @@
     timerStartTime: 'twpp_timer_start',
     timerOffset: 'twpp_timer_offset',
     backgroundOpacity: 'twpp_background_opacity',
+    positionX: 'twpp_position_x',
+    positionY: 'twpp_position_y',
   };
 
   let sidebarContainer;
   let shadowRoot;
   let messagesList;
   let inputField;
-  let layoutStyle;
 
   function htmlEscape(text) {
     const div = document.createElement('div');
@@ -47,6 +50,8 @@
         STORAGE_KEYS.timerStartTime,
         STORAGE_KEYS.timerOffset,
         STORAGE_KEYS.backgroundOpacity,
+        STORAGE_KEYS.positionX,
+        STORAGE_KEYS.positionY,
       ]);
 
       isVisible = result[STORAGE_KEYS.visible] || false;
@@ -55,6 +60,9 @@
         result[STORAGE_KEYS.backgroundOpacity] !== undefined
           ? result[STORAGE_KEYS.backgroundOpacity]
           : 5;
+      
+      windowPositionX = result[STORAGE_KEYS.positionX];
+      windowPositionY = result[STORAGE_KEYS.positionY];
 
       // タイマー状態を復元
       if (result[STORAGE_KEYS.timerStartTime]) {
@@ -140,6 +148,8 @@
         [STORAGE_KEYS.timerStartTime]: timerStartTime,
         [STORAGE_KEYS.timerOffset]: timerOffset,
         [STORAGE_KEYS.backgroundOpacity]: backgroundOpacity,
+        [STORAGE_KEYS.positionX]: windowPositionX,
+        [STORAGE_KEYS.positionY]: windowPositionY,
       });
     } catch (error) {
       console.error('Storage save error:', error);
@@ -181,23 +191,59 @@
       </style>
       <div id="sidebar" style="
         position: fixed;
-        top: 130px;
-        right: 0;
+        top: ${windowPositionY || 130}px;
+        left: ${windowPositionX || (window.innerWidth - 320)}px;
         width: 300px;
         height: calc(100vh - 280px);
         background: transparent;
-        border-left: 1px solid rgba(59, 130, 246, 0.6);
-        border-top: 1px solid rgba(59, 130, 246, 0.6);
-        border-bottom: 1px solid rgba(59, 130, 246, 0.6);
+        border: 1px solid rgba(59, 130, 246, 0.6);
+        border-radius: 8px;
         z-index: 2147483646;
         display: flex;
         flex-direction: column;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         font-size: 14px;
         box-shadow: 
-          inset 1px 0 0 rgba(255, 255, 255, 0.1),
-          -1px 0 3px rgba(0, 0, 0, 0.2);
+          0 4px 20px rgba(0, 0, 0, 0.3),
+          inset 0 1px 0 rgba(255, 255, 255, 0.1);
       ">
+        <div id="title-bar" style="
+          padding: 8px 12px;
+          background: rgba(59, 130, 246, 0.1);
+          border-bottom: 1px solid rgba(59, 130, 246, 0.6);
+          border-radius: 7px 7px 0 0;
+          cursor: move;
+          user-select: none;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          font-weight: bold;
+          color: rgba(255, 255, 255, 0.9);
+          text-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
+        ">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 16px;">🎬</span>
+            <span>Tiny Watch Party</span>
+          </div>
+          <div style="display: flex; gap: 4px;">
+            <div style="
+              width: 8px; height: 8px; 
+              background: rgba(255, 95, 87, 0.8); 
+              border-radius: 50%;
+            "></div>
+            <div style="
+              width: 8px; height: 8px; 
+              background: rgba(255, 189, 46, 0.8); 
+              border-radius: 50%;
+            "></div>
+            <div style="
+              width: 8px; height: 8px; 
+              background: rgba(40, 201, 64, 0.8); 
+              border-radius: 50%;
+            "></div>
+          </div>
+        </div>
+        
         <div id="opacity-control" style="
           padding: 8px 12px;
           border-bottom: 1px solid rgba(59, 130, 246, 0.6);
@@ -303,6 +349,7 @@
 
     // Enhanced key event control for input field
     setupInputEventListeners();
+    setupDragFunctionality();
 
     // Enhanced send button event control
     sendButton.addEventListener('click', (e) => {
@@ -325,24 +372,7 @@
     document.documentElement.appendChild(sidebarContainer);
   }
 
-  function createLayoutStyle() {
-    layoutStyle = document.createElement('style');
-    layoutStyle.setAttribute('data-twpp', 'layout');
-    layoutStyle.textContent = `
-      body {
-        margin-right: 300px !important;
-        transition: margin-right 0.3s ease;
-      }
-    `;
-    document.documentElement.appendChild(layoutStyle);
-  }
-
-  function removeLayoutStyle() {
-    if (layoutStyle) {
-      layoutStyle.remove();
-      layoutStyle = null;
-    }
-  }
+  // モーダル化によりlayoutStyle機能は不要
 
   function updateBackgroundOpacity() {
     if (!shadowRoot) return;
@@ -484,6 +514,87 @@
       e.stopPropagation();
       e.stopImmediatePropagation();
     }, true);
+  }
+
+  function setupDragFunctionality() {
+    const titleBar = shadowRoot.getElementById('title-bar');
+    const sidebar = shadowRoot.getElementById('sidebar');
+    
+    if (!titleBar || !sidebar) return;
+    
+    let isDragging = false;
+    let startX, startY, startLeft, startTop;
+    
+    function startDrag(e) {
+      isDragging = true;
+      
+      // マウス or タッチイベントの座標取得
+      const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+      const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+      
+      startX = clientX;
+      startY = clientY;
+      
+      const rect = sidebar.getBoundingClientRect();
+      startLeft = rect.left;
+      startTop = rect.top;
+      
+      titleBar.style.cursor = 'grabbing';
+      document.body.style.userSelect = 'none';
+      
+      e.preventDefault();
+    }
+    
+    function doDrag(e) {
+      if (!isDragging) return;
+      
+      const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+      const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+      
+      const deltaX = clientX - startX;
+      const deltaY = clientY - startY;
+      
+      let newLeft = startLeft + deltaX;
+      let newTop = startTop + deltaY;
+      
+      // 画面外に出ないよう制限
+      const sidebarRect = sidebar.getBoundingClientRect();
+      const maxLeft = window.innerWidth - sidebarRect.width;
+      const maxTop = window.innerHeight - sidebarRect.height;
+      
+      newLeft = Math.max(0, Math.min(newLeft, maxLeft));
+      newTop = Math.max(0, Math.min(newTop, maxTop));
+      
+      sidebar.style.left = newLeft + 'px';
+      sidebar.style.top = newTop + 'px';
+      
+      // 位置を保存
+      windowPositionX = newLeft;
+      windowPositionY = newTop;
+      
+      e.preventDefault();
+    }
+    
+    function stopDrag() {
+      if (!isDragging) return;
+      
+      isDragging = false;
+      titleBar.style.cursor = 'move';
+      document.body.style.userSelect = '';
+      
+      // 位置をストレージに保存
+      saveToStorage();
+    }
+    
+    // マウスイベント
+    titleBar.addEventListener('mousedown', startDrag);
+    document.addEventListener('mousemove', doDrag);
+    document.addEventListener('mouseup', stopDrag);
+    
+    // タッチイベント
+    titleBar.addEventListener('touchstart', startDrag, { passive: false });
+    document.addEventListener('touchmove', doDrag, { passive: false });
+    document.addEventListener('touchend', stopDrag);
   }
 
   function sendMessage() {
@@ -809,10 +920,8 @@
 
     if (isVisible) {
       sidebarContainer.style.display = 'block';
-      createLayoutStyle();
     } else {
       sidebarContainer.style.display = 'none';
-      removeLayoutStyle();
     }
 
     saveToStorage();
@@ -821,7 +930,6 @@
   function applySidebarVisibility() {
     if (isVisible) {
       sidebarContainer.style.display = 'block';
-      createLayoutStyle();
     } else {
       sidebarContainer.style.display = 'none';
     }
