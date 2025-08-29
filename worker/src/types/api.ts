@@ -7,6 +7,7 @@ import { SecurityErrorCode } from '../utils/room'
 // リクエスト/レスポンス基本型
 export interface Bindings {
   ENVIRONMENT: string
+  CHAT_ROOMS: DurableObjectNamespace
 }
 
 export interface ApiContext {

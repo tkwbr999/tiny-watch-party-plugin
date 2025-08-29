@@ -14,7 +14,14 @@
     "test:unit": "bun test tests/unit/",
     "test:integration": "bun test tests/integration.test.ts",
     "test:watch": "bun test --watch",
-    "test:coverage": "bun test --coverage"
+    "test:coverage": "bun test --coverage",
+    "logs": "wrangler tail",
+    "logs:pretty": "wrangler tail --format pretty",
+    "logs:json": "wrangler tail --format json",
+    "logs:websocket": "wrangler tail --search 'WS-MESSAGE'",
+    "logs:room": "wrangler tail --search 'ROOM'",
+    "logs:error": "wrangler tail --status error",
+    "logs:search": "wrangler tail --search"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250828.0",

@@ -38,9 +38,9 @@ export const CONFIG = {
     }
   },
   CORS: {
-    ALLOWED_ORIGINS: ['chrome-extension://*', 'http://localhost:*'],
-    ALLOWED_HEADERS: ['Content-Type', 'Authorization'],
-    ALLOWED_METHODS: ['GET', 'POST', 'OPTIONS']
+    ALLOWED_ORIGINS: '*', // 不特定多数からのアクセスを許可
+    ALLOWED_HEADERS: ['Content-Type', 'Authorization', 'User-Agent'] as string[],
+    ALLOWED_METHODS: ['GET', 'POST', 'OPTIONS'] as string[]
   }
 } as const
 

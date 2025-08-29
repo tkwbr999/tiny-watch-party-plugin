@@ -6,6 +6,9 @@
   "permissions": [
     "storage"
   ],
+  "host_permissions": [
+    "https://tiny-watch-party-worker.kickintheholdings.workers.dev/*"
+  ],
   "action": {
     "default_title": "Toggle Tiny Watch Party"
   },

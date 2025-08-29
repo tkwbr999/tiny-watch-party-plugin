@@ -12,14 +12,18 @@ import { extractHostFromUrl } from '../utils/helpers'
  * ルーム作成ハンドラー
  */
 export const createRoomHandler = async (c: HonoContext, roomService: RoomService): Promise<Response> => {
+  console.log('🏠 [API-CREATE] Room creation request received')
+  
   try {
     // リクエスト検証
+    console.log(`🔍 [API-CREATE] Validating request from ${c.req.header('User-Agent')?.substring(0, 50) || 'Unknown'}`)
     const validation = validateRequest(c, {
       allowedMethods: ['POST'],
       maxRequestSize: 1024 // 1KB
     })
 
     if (!validation.valid) {
+      console.error('❌ [API-CREATE] Request validation failed:', validation.errors)
       return c.json({
         error: 'Validation Error',
         details: validation.errors,
@@ -29,7 +33,12 @@ export const createRoomHandler = async (c: HonoContext, roomService: RoomService
 
     // ホスト名を取得してルーム作成
     const host = extractHostFromUrl(c.req.url)
+    console.log(`🏠 [API-CREATE] Creating room for host: ${host}`)
+    
     const roomData = roomService.createRoom(host)
+    
+    console.log(`✅ [API-CREATE] Room created successfully: ${roomData.roomId}`)
+    console.log(`🔗 [API-CREATE] WebSocket URL: ${roomData.websocketUrl}`)
 
     // レスポンスヘッダー設定
     c.header('X-Room-Id', roomData.roomId)

@@ -14,7 +14,7 @@ export const rootHandler = (c: HonoContext): Response => {
   const serviceInfo: ServiceInfo = {
     service: 'Tiny Watch Party WebSocket Server',
     runtime: RuntimeDetector.current,
-    environment: c.env?.ENVIRONMENT || 'development',
+    environment: (c.env as any)?.ENVIRONMENT || 'development',
     timestamp: getCurrentISOTimestamp(),
     endpoints: {
       health: ENDPOINTS.HEALTH,
@@ -40,7 +40,7 @@ export const healthHandler = (c: HonoContext): Response => {
     status: 'healthy',
     service: 'tiny-watch-party-worker',
     runtime: RuntimeDetector.current,
-    environment: c.env?.ENVIRONMENT || 'development',
+    environment: (c.env as any)?.ENVIRONMENT || 'development',
     timestamp: getCurrentISOTimestamp(),
     uptime: Date.now(),
     version: '1.0.0',
@@ -73,7 +73,7 @@ export const statusHandler = (c: HonoContext): Response => {
     status: 'operational',
     timestamp: getCurrentISOTimestamp(),
     runtime: RuntimeDetector.current,
-    environment: c.env?.ENVIRONMENT || 'development',
+    environment: (c.env as any)?.ENVIRONMENT || 'development',
     request: {
       method: c.req.method,
       url: url.toString(),

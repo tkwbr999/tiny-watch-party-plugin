@@ -56,18 +56,27 @@ export class RoomService {
    * ユーザーをルームに参加させる
    */
   joinRoom(roomId: string, ws: WebSocket, userInfo: UserInfo): { success: boolean; participantCount: number } {
+    console.log(`🏠 [ROOM-JOIN] User ${userInfo.id} joining room ${roomId}`)
+    
     // ルーム作成（存在しない場合）
     if (!this.roomSessions.has(roomId)) {
+      console.log(`🆕 [ROOM-JOIN] Creating new room ${roomId}`)
       this.roomSessions.set(roomId, new Set())
       this.roomUsers.set(roomId, new Map())
       this.roomCreatedAt.set(roomId, Date.now())
+    } else {
+      console.log(`🏠 [ROOM-JOIN] Room ${roomId} already exists`)
     }
 
     const sessions = this.roomSessions.get(roomId)!
     const users = this.roomUsers.get(roomId)!
 
+    console.log(`🏠 [ROOM-JOIN] Current sessions in room: ${sessions.size}`)
+    console.log(`🏠 [ROOM-JOIN] Max participants: ${CONFIG.ROOM.MAX_PARTICIPANTS}`)
+
     // 参加者数制限チェック
     if (sessions.size >= CONFIG.ROOM.MAX_PARTICIPANTS) {
+      console.warn(`⚠️ [ROOM-JOIN] Room ${roomId} is full (${sessions.size}/${CONFIG.ROOM.MAX_PARTICIPANTS})`)
       return { success: false, participantCount: sessions.size }
     }
 
@@ -75,7 +84,11 @@ export class RoomService {
     sessions.add(ws)
     users.set(ws, userInfo)
 
-    return { success: true, participantCount: sessions.size }
+    const newCount = sessions.size
+    console.log(`✅ [ROOM-JOIN] Successfully added user ${userInfo.id} to room ${roomId}`)
+    console.log(`👥 [ROOM-JOIN] New participant count: ${newCount}`)
+
+    return { success: true, participantCount: newCount }
   }
 
   /**

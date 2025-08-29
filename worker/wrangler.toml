@@ -4,9 +4,26 @@ main = "src/index.ts"
 compatibility_date = "2024-08-28"
 compatibility_flags = ["nodejs_compat"]
 
+# Observability設定 - ログとメトリクスを有効化
+[observability]
+enabled = true
+
+[observability.logs]
+enabled = true
+
 # 開発環境用変数
 [vars]
 ENVIRONMENT = "development"
+
+# Durable Objects設定
+[[durable_objects.bindings]]
+name = "CHAT_ROOMS"
+class_name = "ChatRoom"
+
+# Durable Objects Migration設定（無料プラン用）
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ChatRoom"]
 
 # ステージング環境
 [env.staging]

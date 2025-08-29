@@ -16,7 +16,7 @@ export class ConnectionService {
    * WebSocketが開いているかチェック
    */
   isWebSocketOpen(ws: WebSocket): boolean {
-    return ws.readyState === WebSocket.READY_STATE_OPEN
+    return ws.readyState === 1 // WebSocket.OPEN
   }
 
   /**
@@ -41,14 +41,27 @@ export class ConnectionService {
    */
   broadcastToRoom(roomId: string, message: ServerMessage, excludeWs?: WebSocket): number {
     const sessions = this.roomService.getRoomSessions(roomId)
+    console.log(`📡 [BROADCAST] Room ${roomId}: ${sessions.length} total sessions`)
+    
     let sentCount = 0
+    let excludedCount = 0
 
-    sessions.forEach(ws => {
-      if (ws !== excludeWs && this.sendMessage(ws, message)) {
+    sessions.forEach((ws, index) => {
+      if (ws === excludeWs) {
+        excludedCount++
+        console.log(`🚫 [BROADCAST] Excluding WebSocket ${index} (sender)`)
+        return
+      }
+
+      const sendResult = this.sendMessage(ws, message)
+      console.log(`📤 [BROADCAST] WebSocket ${index} send result: ${sendResult} (state: ${ws.readyState})`)
+      
+      if (sendResult) {
         sentCount++
       }
     })
 
+    console.log(`📊 [BROADCAST] Results - Sent: ${sentCount}, Excluded: ${excludedCount}, Failed: ${sessions.length - sentCount - excludedCount}`)
     return sentCount
   }
 
@@ -106,6 +119,9 @@ export class ConnectionService {
     userId: string,
     username: string
   ): number {
+    console.log(`💬 [CHAT-BROADCAST] Room: ${roomId}, From: ${username} (${userId})`)
+    console.log(`💬 [CHAT-BROADCAST] Message: "${message}"`)
+
     const chatMessage: ServerMessage = {
       type: 'message',
       timestamp: Date.now(),
@@ -116,7 +132,10 @@ export class ConnectionService {
       }
     }
 
-    return this.broadcastToRoom(roomId, chatMessage)
+    const broadcastCount = this.broadcastToRoom(roomId, chatMessage)
+    console.log(`💬 [CHAT-BROADCAST] Delivered to ${broadcastCount} recipients`)
+    
+    return broadcastCount
   }
 
   /**
