@@ -281,6 +281,7 @@
         timestamp: Date.now(),
         data: {
           userId: this.userId,
+          username: currentUsername || `User-${this.userId.split('_')[2]}`,
           message: text
         }
       };
@@ -859,6 +860,35 @@
             </div>
           </div>
           
+          <!-- Username Input (最優先) -->
+          <div style="margin-bottom: 8px; padding: 8px; background: rgba(34, 197, 94, 0.1); border-radius: 4px; border: 1px solid rgba(34, 197, 94, 0.3);">
+            <label style="
+              display: block;
+              font-size: 12px;
+              color: rgba(255, 255, 255, 0.95);
+              margin-bottom: 6px;
+              font-weight: bold;
+              text-shadow: 0 0 4px rgba(0, 0, 0, 1);
+            ">👤 ユーザー名 <span style="color: rgba(255, 100, 100, 1); font-weight: bold;">*必須 (6文字以内)</span></label>
+            <input type="text" id="username-input" placeholder="6文字以内で名前を入力 (例: ユーザー1)" required maxlength="6" style="
+              width: 100%;
+              padding: 8px 10px;
+              border: 2px solid rgba(34, 197, 94, 0.8);
+              border-radius: 4px;
+              font-size: 13px;
+              background: rgba(0, 0, 0, 0.4);
+              color: rgba(255, 255, 255, 0.95);
+              box-sizing: border-box;
+              font-weight: 500;
+            ">
+            <div id="username-counter" style="
+              font-size: 10px;
+              color: rgba(255, 255, 255, 0.7);
+              margin-top: 4px;
+              text-align: right;
+            ">0/6文字</div>
+          </div>
+          
           <!-- Create Room Button -->
           <button id="create-room-button" style="
             width: 100%;
@@ -1046,6 +1076,26 @@
       updateBackgroundOpacity();
       saveToStorage();
     });
+
+    // Username character counter event listener
+    const usernameInput = shadowRoot.getElementById('username-input');
+    const usernameCounter = shadowRoot.getElementById('username-counter');
+    
+    if (usernameInput && usernameCounter) {
+      usernameInput.addEventListener('input', (e) => {
+        const length = e.target.value.length;
+        usernameCounter.textContent = `${length}/6文字`;
+        
+        // Color coding
+        if (length === 0) {
+          usernameCounter.style.color = 'rgba(255, 255, 255, 0.7)';
+        } else if (length <= 6) {
+          usernameCounter.style.color = 'rgba(34, 197, 94, 0.8)';
+        } else {
+          usernameCounter.style.color = 'rgba(255, 100, 100, 0.9)';
+        }
+      });
+    }
 
     document.documentElement.appendChild(sidebarContainer);
   }
@@ -1644,6 +1694,36 @@
     console.log('🏠 [TWPP-CREATE] Creating room...');
     console.log('🌐 [TWPP-CREATE] API endpoint:', `${WS_CONFIG.BASE_URL.replace('wss:', 'https:')}/api/rooms/create`);
     
+    // Get username
+    const usernameInput = shadowRoot.getElementById('username-input');
+    const username = usernameInput ? usernameInput.value.trim() : '';
+    
+    if (!username) {
+      addSystemMessage('⚠️ ユーザー名の入力が必要です。他のユーザーがあなたを識別できるよう、ユーザー名を入力してからルームを作成してください。');
+      // Focus username input
+      if (usernameInput) {
+        usernameInput.focus();
+        usernameInput.style.borderColor = 'rgba(255, 100, 100, 0.8)';
+        setTimeout(() => {
+          usernameInput.style.borderColor = 'rgba(34, 197, 94, 0.8)';
+        }, 2000);
+      }
+      return;
+    }
+
+    if (username.length > 6) {
+      addSystemMessage('⚠️ ユーザー名は6文字以内で入力してください。');
+      // Focus username input
+      if (usernameInput) {
+        usernameInput.focus();
+        usernameInput.style.borderColor = 'rgba(255, 100, 100, 0.8)';
+        setTimeout(() => {
+          usernameInput.style.borderColor = 'rgba(34, 197, 94, 0.8)';
+        }, 2000);
+      }
+      return;
+    }
+    
     try {
       const createButton = shadowRoot.getElementById('create-room-button');
       if (createButton) {
@@ -1669,11 +1749,15 @@
 
       // Save room data
       currentRoomId = data.roomId;
+      currentUsername = username;
       isHost = true;
       hostToken = data.hostToken;
 
       // Update UI
       displayRoomId(currentRoomId);
+      
+      // Clear username input
+      if (usernameInput) usernameInput.value = '';
       
       // Save to storage
       const saveSuccess = await safeStorageSet({
@@ -1736,6 +1820,36 @@
       return;
     }
 
+    // Get username
+    const usernameInput = shadowRoot.getElementById('username-input');
+    const username = usernameInput ? usernameInput.value.trim() : '';
+    
+    if (!username) {
+      addSystemMessage('⚠️ ユーザー名の入力が必要です。他のユーザーがあなたを識別できるよう、ユーザー名を入力してからルームに参加してください。');
+      // Focus username input
+      if (usernameInput) {
+        usernameInput.focus();
+        usernameInput.style.borderColor = 'rgba(255, 100, 100, 0.8)';
+        setTimeout(() => {
+          usernameInput.style.borderColor = 'rgba(34, 197, 94, 0.8)';
+        }, 2000);
+      }
+      return;
+    }
+
+    if (username.length > 6) {
+      addSystemMessage('⚠️ ユーザー名は6文字以内で入力してください。');
+      // Focus username input
+      if (usernameInput) {
+        usernameInput.focus();
+        usernameInput.style.borderColor = 'rgba(255, 100, 100, 0.8)';
+        setTimeout(() => {
+          usernameInput.style.borderColor = 'rgba(34, 197, 94, 0.8)';
+        }, 2000);
+      }
+      return;
+    }
+
     // Validate room ID format
     if (!/^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(roomId)) {
       addSystemMessage('無効なルームID形式です (例: A3F2-8K9L-4MN7)');
@@ -1768,15 +1882,17 @@
 
       // Save room data
       currentRoomId = roomId;
+      currentUsername = username;
       isHost = false;
       hostToken = null;
 
       // Update UI
       displayRoomId(currentRoomId);
       
-      // Clear input
+      // Clear inputs
       const roomInput = shadowRoot.getElementById('room-id-input');
       if (roomInput) roomInput.value = '';
+      if (usernameInput) usernameInput.value = '';
 
       // Save to storage
       const saveSuccess = await safeStorageSet({

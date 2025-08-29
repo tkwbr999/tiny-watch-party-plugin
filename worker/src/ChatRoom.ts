@@ -134,7 +134,10 @@ export class ChatRoom {
             const chatMessage = message.data?.message || ''
             const userInfo = this.users.get(ws)
             const senderId = message.data?.userId || userInfo?.userId || 'unknown'
-            const senderName = userInfo?.username || `User-${senderId.split('_')[2] || 'unknown'}`
+            // 優先順位: 1.クライアントから送信されたユーザー名 2.保存済みユーザー名 3.フォールバック
+            const senderName = message.data?.username || userInfo?.username || `User-${senderId.split('_')[2] || 'unknown'}`
+            
+            console.log(`👤 [DURABLE] Message from userId: ${senderId}, username: ${senderName}`)
 
             if (chatMessage.trim()) {
               const broadcastMessage = JSON.stringify({
