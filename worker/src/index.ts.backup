@@ -1,0 +1,508 @@
+import { Hono } from 'hono'
+import { cors } from 'hono/cors'
+import { logger } from 'hono/logger'
+import { 
+  generateRoomId, 
+  generateHostToken, 
+  validateRoomId, 
+  validateMessage,
+  sanitizeHtml,
+  RateLimiter,
+  SecurityErrorCode,
+  CONFIG,
+  RuntimeDetector 
+} from './utils/room'
+
+// 🔒 型安全な WebSocket インポート
+type UpgradeWebSocketFn = (handler: (c: any) => any) => any
+
+let upgradeWebSocket: UpgradeWebSocketFn | undefined
+if (RuntimeDetector.isCloudflareWorkers()) {
+  try {
+    upgradeWebSocket = require('hono/cloudflare-workers').upgradeWebSocket as UpgradeWebSocketFn
+  } catch (error) {
+    console.error('Failed to load Cloudflare Workers WebSocket module:', error)
+  }
+}
+
+// Bun開発環境とCloudflare Workers両対応の型定義
+type Bindings = {
+  ENVIRONMENT: string
+}
+
+// WebSocket用の型定義
+interface ClientMessage {
+  type: 'ping' | 'join_room' | 'leave_room' | 'send_message'
+  timestamp: number
+  data?: any
+}
+
+interface ServerMessage {
+  type: 'pong' | 'room_joined' | 'room_left' | 'message' | 'error' | 'user_joined' | 'user_left'
+  timestamp: number
+  data?: any
+}
+
+interface UserInfo {
+  id: string
+  username?: string
+  joinedAt: number
+}
+
+// 🔒 構造化エラーレスポンス
+interface ErrorResponse {
+  type: 'error'
+  code: SecurityErrorCode
+  message: string
+  timestamp: number
+  context?: Record<string, any>
+}
+
+function createErrorResponse(code: SecurityErrorCode, message: string, context?: any): ErrorResponse {
+  return {
+    type: 'error',
+    code,
+    message,
+    timestamp: Date.now(),
+    context
+  }
+}
+
+// インメモリルーム管理（データベース不使用）
+// 🚨 重要な制限: Cloudflare Workersは無状態のため、異なるWebSocket接続間でMapは共有されない
+// 実際のマルチユーザーチャットには Durable Objects が必要
+// 現在の実装は単一接続の ping/pong、メッセージエコーのみ対応
+const roomSessions = new Map<string, Set<WebSocket>>()
+const roomUsers = new Map<string, Map<WebSocket, UserInfo>>()
+const roomCreatedAt = new Map<string, number>()
+
+// WebSocket ヘルパー関数
+function sendMessage(ws: WebSocket, message: ServerMessage) {
+  if (ws.readyState === WebSocket.READY_STATE_OPEN) {
+    ws.send(JSON.stringify(message))
+  }
+}
+
+function broadcastToRoom(roomId: string, message: ServerMessage, excludeWs?: WebSocket) {
+  const sessions = roomSessions.get(roomId)
+  if (sessions) {
+    sessions.forEach(ws => {
+      if (ws !== excludeWs) {
+        sendMessage(ws, message)
+      }
+    })
+  }
+}
+
+function joinRoom(roomId: string, ws: WebSocket, userInfo: UserInfo) {
+  // ルーム作成（存在しない場合）
+  if (!roomSessions.has(roomId)) {
+    roomSessions.set(roomId, new Set())
+    roomUsers.set(roomId, new Map())
+    roomCreatedAt.set(roomId, Date.now())
+  }
+
+  const sessions = roomSessions.get(roomId)!
+  const users = roomUsers.get(roomId)!
+  
+  // ユーザーをルームに追加
+  sessions.add(ws)
+  users.set(ws, userInfo)
+
+  // 既存ユーザーに参加通知
+  broadcastToRoom(roomId, {
+    type: 'user_joined',
+    timestamp: Date.now(),
+    data: { userId: userInfo.id, username: userInfo.username }
+  }, ws)
+
+  // 参加者に成功通知
+  sendMessage(ws, {
+    type: 'room_joined',
+    timestamp: Date.now(),
+    data: { 
+      roomId,
+      participantCount: sessions.size,
+      yourUserId: userInfo.id 
+    }
+  })
+}
+
+function leaveRoom(roomId: string, ws: WebSocket) {
+  const sessions = roomSessions.get(roomId)
+  const users = roomUsers.get(roomId)
+  
+  if (sessions && users) {
+    const userInfo = users.get(ws)
+    
+    sessions.delete(ws)
+    users.delete(ws)
+
+    // 他のユーザーに退出通知
+    if (userInfo) {
+      broadcastToRoom(roomId, {
+        type: 'user_left',
+        timestamp: Date.now(),
+        data: { userId: userInfo.id, username: userInfo.username }
+      })
+    }
+
+    // ルームが空になったらクリーンアップ
+    if (sessions.size === 0) {
+      roomSessions.delete(roomId)
+      roomUsers.delete(roomId)
+      roomCreatedAt.delete(roomId)
+    }
+  }
+}
+
+const app = new Hono<{ Bindings: Bindings }>()
+
+// パフォーマンス測定ミドルウェア
+app.use('*', async (c, next) => {
+  const start = performance.now()
+  await next()
+  const end = performance.now()
+  c.header('X-Response-Time', `${end - start}ms`)
+})
+
+app.use('*', logger())
+app.use('*', cors({
+  origin: ['chrome-extension://*', 'http://localhost:*'],
+  allowHeaders: ['Content-Type', 'Authorization'],
+  allowMethods: ['GET', 'POST', 'OPTIONS'],
+}))
+
+// ルートエンドポイント
+app.get('/', (c) => {
+  return c.json({
+    service: 'Tiny Watch Party WebSocket Server',
+    runtime: RuntimeDetector.current,
+    environment: c.env?.ENVIRONMENT || 'development',
+    timestamp: new Date().toISOString(),
+    endpoints: {
+      health: '/health',
+      status: '/status',
+      perf: '/perf',
+      roomCreate: '/api/rooms/create',
+      roomValidate: '/api/rooms/{roomId}/validate',
+      webSocket: '/ws/{roomId}'
+    },
+    performance: {
+      note: RuntimeDetector.getPerformanceNote()
+    }
+  })
+})
+
+// ヘルスチェック with パフォーマンス情報
+app.get('/health', (c) => {
+  return c.json({
+    status: 'healthy',
+    service: 'tiny-watch-party-worker',
+    runtime: RuntimeDetector.current,
+    environment: c.env?.ENVIRONMENT || 'development',
+    timestamp: new Date().toISOString(),
+    uptime: Date.now(),
+    version: '1.0.0',
+    features: {
+      webSocket: RuntimeDetector.isCloudflareWorkers() ? '🚧 (Stateless - Single user only)' : '🚧 (CF Workers only)',
+      honoFramework: '✅',
+      typeScript: '✅',
+      cors: '✅',
+      performance: '✅',
+      roomManagement: '✅'
+    },
+    limitations: {
+      webSocket: 'Current implementation supports single-user connections only. Multi-user chat requires Durable Objects.',
+      state: 'Stateless Workers - no shared memory between WebSocket connections'
+    }
+  })
+})
+
+// ステータス詳細エンドポイント
+app.get('/status', (c) => {
+  const url = new URL(c.req.url)
+  
+  return c.json({
+    status: 'operational',
+    timestamp: new Date().toISOString(),
+    runtime: RuntimeDetector.current,
+    environment: c.env?.ENVIRONMENT || 'development',
+    request: {
+      method: c.req.method,
+      url: url.toString(),
+      userAgent: c.req.header('User-Agent') || 'unknown'
+    },
+    worker: {
+      region: (c.req as any).cf?.colo || 'local',
+      country: (c.req as any).cf?.country || 'local',
+      ip: c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || 'localhost'
+    },
+    performance: {
+      runtime: RuntimeDetector.current,
+      note: RuntimeDetector.getPerformanceNote()
+    }
+  })
+})
+
+// パフォーマンステストエンドポイント
+app.get('/perf', async (c) => {
+  const start = performance.now()
+  
+  // 軽量な処理でパフォーマンステスト
+  const data = Array.from({ length: 1000 }, (_, i) => ({ id: i, value: Math.random() }))
+  const processed = data.filter(item => item.value > 0.5).map(item => ({ ...item, processed: true }))
+  
+  const end = performance.now()
+  
+  return c.json({
+    runtime: RuntimeDetector.current,
+    processingTime: `${end - start}ms`,
+    dataProcessed: {
+      total: data.length,
+      filtered: processed.length
+    },
+    timestamp: new Date().toISOString()
+  })
+})
+
+// ルーム作成API
+app.post('/api/rooms/create', async (c) => {
+  const roomId = generateRoomId()
+  const hostToken = generateHostToken()
+  const createdAt = new Date()
+  const expiresAt = new Date(createdAt.getTime() + 3 * 60 * 60 * 1000) // 3時間後
+  
+  // レスポンスヘッダー設定
+  c.header('X-Room-Id', roomId)
+  c.header('X-Host-Token', hostToken)
+  
+  const host = c.req.header('host') || 'localhost:3000'
+  const protocol = host.includes('localhost') ? 'ws://' : 'wss://'
+  
+  return c.json({
+    roomId,
+    createdAt: createdAt.toISOString(),
+    expiresAt: expiresAt.toISOString(),
+    hostToken,
+    websocketUrl: `${protocol}${host}/ws/${roomId}`,
+    shareUrl: `https://tiny-watch-party.example.com/join/${roomId}`,
+    management: {
+      validateUrl: `/api/rooms/${roomId}/validate`,
+      maxParticipants: 10,
+      autoExpire: true
+    }
+  }, 201)
+})
+
+// ルーム情報取得・バリデーション
+app.get('/api/rooms/:roomId/validate', (c) => {
+  const roomId = c.req.param('roomId')
+  const isValid = validateRoomId(roomId)
+  
+  return c.json({
+    roomId,
+    valid: isValid,
+    message: isValid ? 'Valid room ID format' : 'Invalid room ID format',
+    format: 'XXXX-YYYY-ZZZZ (12 characters, A-Z and 0-9)',
+    example: 'A3F2-8K9L-4MN7'
+  })
+})
+
+// ルーム一覧（デモ用）
+app.get('/api/rooms', (c) => {
+  // 実際の実装ではデータベースから取得
+  const demoRooms = [
+    {
+      roomId: generateRoomId(),
+      status: 'active',
+      participants: Math.floor(Math.random() * 5) + 1,
+      createdAt: new Date(Date.now() - Math.random() * 3600000).toISOString()
+    },
+    {
+      roomId: generateRoomId(),
+      status: 'active', 
+      participants: Math.floor(Math.random() * 3) + 1,
+      createdAt: new Date(Date.now() - Math.random() * 3600000).toISOString()
+    }
+  ]
+  
+  return c.json({
+    rooms: demoRooms,
+    total: demoRooms.length,
+    note: 'This is demo data. Real implementation would use database.'
+  })
+})
+
+// WebSocket エンドポイント（環境に応じて分岐）
+if (RuntimeDetector.isCloudflareWorkers() && upgradeWebSocket) {
+  // Cloudflare Workers環境
+  app.get('/ws/:roomId', upgradeWebSocket((c) => {
+    const roomId = c.req.param('roomId')
+    
+    // 🔒 接続レート制限
+    const clientIp = c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || 'unknown'
+    if (RateLimiter.isRateLimited(`conn-${clientIp}`, CONFIG.SECURITY.RATE_LIMIT.CONNECTIONS_PER_MINUTE, CONFIG.SECURITY.RATE_LIMIT.WINDOW_MS)) {
+      return {
+        onOpen(event, ws) {
+          sendMessage(ws, createErrorResponse(SecurityErrorCode.RATE_LIMITED, 'Too many connection attempts'))
+          ws.close(1008, 'Rate limited')
+        }
+      }
+    }
+    
+    // ルームID検証
+    if (!validateRoomId(roomId)) {
+      return {
+        onOpen(event, ws) {
+          sendMessage(ws, createErrorResponse(SecurityErrorCode.INVALID_ROOM_ID, 'Invalid room ID format'))
+          ws.close(1000, 'Invalid room ID')
+        }
+      }
+    }
+
+    return {
+      onMessage(event, ws) {
+        try {
+          // 🔒 メッセージサイズ制限
+          if (typeof event.data === 'string' && event.data.length > 5000) {
+            sendMessage(ws, createErrorResponse(SecurityErrorCode.MESSAGE_TOO_LARGE, 'Message too large'))
+            return
+          }
+
+          const message: ClientMessage = JSON.parse(event.data as string)
+          
+          // 🔒 入力検証
+          const validation = validateMessage(message)
+          if (!validation.valid) {
+            sendMessage(ws, createErrorResponse(SecurityErrorCode.INVALID_MESSAGE, validation.error || 'Invalid message'))
+            return
+          }
+
+          // 🔒 レート制限チェック
+          const clientIp = (event as any).request?.headers?.get('CF-Connecting-IP') || 'unknown'
+          if (RateLimiter.isRateLimited(`msg-${clientIp}`, CONFIG.SECURITY.RATE_LIMIT.MESSAGES_PER_MINUTE, CONFIG.SECURITY.RATE_LIMIT.WINDOW_MS)) {
+            sendMessage(ws, createErrorResponse(SecurityErrorCode.RATE_LIMITED, 'Too many messages, please slow down'))
+            return
+          }
+          
+          switch (message.type) {
+            case 'ping':
+              sendMessage(ws, {
+                type: 'pong',
+                timestamp: Date.now()
+              })
+              break
+
+            case 'join_room':
+              if (message.data?.userId) {
+                // 🔒 ユーザー情報のサニタイゼーション
+                const sanitizedUserId = sanitizeHtml(message.data.userId)
+                const sanitizedUsername = message.data.username ? sanitizeHtml(message.data.username) : `User-${sanitizedUserId.slice(0, 6)}`
+                
+                const userInfo: UserInfo = {
+                  id: sanitizedUserId,
+                  username: sanitizedUsername,
+                  joinedAt: Date.now()
+                }
+                joinRoom(roomId, ws, userInfo)
+              } else {
+                sendMessage(ws, createErrorResponse(SecurityErrorCode.INVALID_MESSAGE, 'userId is required for join_room'))
+              }
+              break
+
+            case 'send_message':
+              if (message.data?.message && message.data?.userId) {
+                // 🔒 メッセージコンテンツのサニタイゼーション
+                const sanitizedMessage = sanitizeHtml(message.data.message)
+                const sanitizedUsername = message.data.username ? sanitizeHtml(message.data.username) : 'Anonymous'
+                const sanitizedUserId = sanitizeHtml(message.data.userId)
+                
+                // メッセージを同じルームの全参加者にブロードキャスト
+                broadcastToRoom(roomId, {
+                  type: 'message',
+                  timestamp: Date.now(),
+                  data: {
+                    message: sanitizedMessage,
+                    userId: sanitizedUserId,
+                    username: sanitizedUsername
+                  }
+                })
+              } else {
+                sendMessage(ws, createErrorResponse(SecurityErrorCode.INVALID_MESSAGE, 'message and userId are required'))
+              }
+              break
+
+            case 'leave_room':
+              leaveRoom(roomId, ws)
+              sendMessage(ws, {
+                type: 'room_left',
+                timestamp: Date.now(),
+                data: { roomId }
+              })
+              break
+
+            default:
+              sendMessage(ws, createErrorResponse(SecurityErrorCode.INVALID_MESSAGE, `Unknown message type: ${message.type}`))
+          }
+        } catch (error) {
+          console.error('WebSocket message error:', error)
+          if (error instanceof SyntaxError) {
+            sendMessage(ws, createErrorResponse(SecurityErrorCode.INVALID_MESSAGE, 'Invalid JSON format'))
+          } else {
+            sendMessage(ws, createErrorResponse(SecurityErrorCode.INVALID_MESSAGE, 'Message processing error'))
+          }
+        }
+      },
+
+      onClose(event, ws) {
+        console.log(`WebSocket connection closed for room ${roomId}: ${event.code} ${event.reason}`)
+        leaveRoom(roomId, ws)
+      },
+
+      onError(event, ws) {
+        console.error(`WebSocket error in room ${roomId}:`, event)
+        leaveRoom(roomId, ws)
+      }
+    }
+  }))
+} else {
+  // Bun開発環境では代替エンドポイント
+  app.get('/ws/:roomId', (c) => {
+    return c.json({
+      error: 'WebSocket not supported in development mode',
+      message: 'WebSocket functionality is only available in Cloudflare Workers environment',
+      roomId: c.req.param('roomId'),
+      alternatives: {
+        production: 'Deploy to Cloudflare Workers to test WebSocket functionality',
+        testing: 'Use curl/fetch to test HTTP APIs instead'
+      }
+    }, 501)
+  })
+}
+
+// 404ハンドラー
+app.notFound((c) => {
+  return c.json({
+    error: 'Not Found',
+    message: 'The requested endpoint does not exist.',
+    timestamp: new Date().toISOString(),
+    availableEndpoints: ['/', '/health', '/status', '/perf', 'POST /api/rooms/create', '/api/rooms', '/api/rooms/{roomId}/validate']
+  }, 404)
+})
+
+// エラーハンドラー
+app.onError((err, c) => {
+  console.error('Error:', err)
+  return c.json({
+    error: 'Internal Server Error',
+    message: err.message,
+    timestamp: new Date().toISOString()
+  }, 500)
+})
+
+// Bun開発サーバー用とCloudflare Workers用のエクスポート
+export default {
+  port: 3000,
+  fetch: app.fetch,
+}

@@ -1,15 +1,25 @@
 /**
- * インテグレーションテスト - 本番環境API
- * URL: https://tiny-watch-party-worker.kickintheholdings.workers.dev
+ * インテグレーションテスト - 環境変数設定による動的URL対応
+ * 🔒 セキュリティ強化: ハードコードされたURLを環境変数に移行
  */
 
 import { describe, test, expect } from 'bun:test'
+import { getEnvConfig, EnvironmentError } from '../src/utils/env'
 
-const BASE_URL = Bun.env.DEV_BASE_URL
-
-if (!BASE_URL) {
-  throw new Error('DEV_BASE_URL environment variable is required. Please set it in your .env file.')
+// 🔒 セキュリティ強化: 環境変数の検証
+let config: ReturnType<typeof getEnvConfig>
+try {
+  config = getEnvConfig()
+} catch (error) {
+  if (error instanceof EnvironmentError) {
+    console.error('❌ Environment Configuration Error:')
+    console.error(error.message)
+    process.exit(1)
+  }
+  throw error
 }
+
+const BASE_URL = config.DEV_BASE_URL
 
 interface RoomCreateResponse {
   roomId: string
