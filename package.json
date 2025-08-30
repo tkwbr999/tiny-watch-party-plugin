@@ -1,6 +1,6 @@
 {
   "name": "tiny-watch-party-plugin",
-  "version": "0.0.17",
+  "version": "0.0.18",
   "description": "小さなコミュニティでのウォッチパーティプラグイン",
   "main": "extension/manifest.json",
   "scripts": {
@@ -10,8 +10,9 @@
     "sync:manifest": "node -e \"const pkg = require('./package.json'); const manifest = require('./extension/manifest.json'); manifest.version = pkg.version; require('fs').writeFileSync('./extension/manifest.json', JSON.stringify(manifest, null, 2) + '\\n');\"",
     "release:patch": "npm run version:patch && npm run sync:manifest && git add . && git commit -m \"chore: bump version to $(node -p 'require(\"./package.json\").version')\" && git tag v$(node -p 'require(\"./package.json\").version')",
     "push": "git push && git push --tags",
-    "validate": "node scripts/validate.js",
-    "test": "node scripts/test.js",
+    "cli": "node scripts/cli.js",
+    "validate": "node scripts/cli.js validate",
+    "test": "node scripts/cli.js test",
     "build": "make pack",
     "build:store": "make store",
     "build:dev": "make dev-pack",

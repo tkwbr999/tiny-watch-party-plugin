@@ -23,7 +23,7 @@ class_name = "ChatRoom"
 # Durable Objects Migration設定（無料プラン用）
 [[migrations]]
 tag = "v1"
-new_sqlite_classes = ["ChatRoom"]
+new_classes = ["ChatRoom"]
 
 # ステージング環境
 [env.staging]

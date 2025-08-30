@@ -83,7 +83,7 @@ const createApp = () => {
   // ルーム管理API
   // ============================
   app.post(ENDPOINTS.ROOM_CREATE, (c) => createRoomHandler(c, roomService))
-  app.get('/api/rooms/:roomId/validate', (c) => validateRoomHandler(c, roomService))
+  app.get(ENDPOINTS.ROOM_VALIDATE, (c) => validateRoomHandler(c, roomService))
   app.get(ENDPOINTS.ROOM_LIST, (c) => listRoomsHandler(c, roomService))
   
   // 管理用エンドポイント

@@ -2,11 +2,14 @@
  * ChatRoom Durable Object
  * 複数ユーザー間でのWebSocketメッセージ共有を実現
  */
+import { MessageService } from './services/messageService'
+import { validateRoomId, SecurityErrorCode } from './utils/room'
+import { validateWebSocketMessageSize } from './middleware/security'
 
 export interface ChatMessage {
   type: string
   data: any
-  timestamp: string
+  timestamp: number
   userId?: string
   username?: string
 }
@@ -15,11 +18,13 @@ export class ChatRoom {
   state: DurableObjectState
   sessions: Set<WebSocket>
   users: Map<WebSocket, { userId: string; username: string }>
+  messageService: MessageService
 
   constructor(state: DurableObjectState) {
     this.state = state
     this.sessions = new Set()
     this.users = new Map()
+    this.messageService = new MessageService()
     
     console.log('🏠 [DURABLE] ChatRoom instance created')
   }
@@ -50,8 +55,18 @@ export class ChatRoom {
 
       console.log(`🔌 [DURABLE] Created WebSocketPair for room: ${roomId}`)
 
-      // サーバー側WebSocketを受け入れてセッション管理
-      this.handleSession(server, roomId)
+      // まず受け入れ
+      server.accept()
+
+      // ルームID検証（不正ならエラーを送って終了）
+      if (!validateRoomId(roomId)) {
+        const err = this.messageService.createErrorMessage(SecurityErrorCode.INVALID_ROOM_ID, 'Invalid room ID format')
+        server.send(JSON.stringify(err))
+        try { server.close(1003, 'Invalid room id') } catch {}
+      } else {
+        // サーバー側WebSocketを受け入れてセッション管理
+        this.handleSession(server, roomId)
+      }
 
       console.log(`✅ [DURABLE] WebSocket setup complete for room: ${roomId}`)
       console.log(`👥 [DURABLE] Current sessions: ${this.sessions.size}`)
@@ -74,8 +89,6 @@ export class ChatRoom {
   }
 
   handleSession(ws: WebSocket, roomId: string): void {
-    // WebSocketを受け入れ
-    ws.accept()
     
     // セッション管理に追加
     this.sessions.add(ws)
@@ -87,72 +100,78 @@ export class ChatRoom {
 
     // メッセージ受信イベント
     ws.addEventListener('message', (event) => {
-      console.log(`📨 [DURABLE] Message received in room ${roomId}: ${event.data}`)
-      
+      const raw = event.data as string
+      console.log(`📨 [DURABLE] Message received in room ${roomId}: ${raw}`)
+
+      const sizeCheck = validateWebSocketMessageSize(raw)
+      if (!sizeCheck.valid) {
+        ws.send(JSON.stringify(this.messageService.createErrorMessage(SecurityErrorCode.MESSAGE_TOO_LARGE, 'Message too large')))
+        return
+      }
+
       try {
-        const message: ChatMessage = JSON.parse(event.data as string)
+        const message: ChatMessage = JSON.parse(raw)
         console.log(`🎯 [DURABLE] Processing message type: ${message.type}`)
+
+        const baseValidation = this.messageService.validateClientMessage(message)
+        if (!baseValidation.valid) {
+          ws.send(JSON.stringify(this.messageService.createErrorMessage(SecurityErrorCode.INVALID_MESSAGE, baseValidation.error || 'Invalid message')))
+          return
+        }
 
         switch (message.type) {
           case 'join_room':
             console.log(`👤 [DURABLE] User joining room ${roomId}`)
-            userId = message.data?.userId || `user_${Date.now()}`
-            username = message.data?.username || `User-${(userId || '').split('_')[2] || Math.random().toString(36).substr(2, 5)}`
-            
-            // ユーザー情報を保存
-            if (userId && username) {
-              this.users.set(ws, { userId, username })
+            {
+              const processed = this.messageService.processJoinRoomMessage(message.data)
+              if (!processed.valid || !processed.userInfo) {
+                ws.send(JSON.stringify(this.messageService.createErrorMessage(SecurityErrorCode.INVALID_MESSAGE, processed.error || 'Invalid join data')))
+                return
+              }
+
+              userId = processed.userInfo.id
+              username = processed.userInfo.username || null
+
+              this.users.set(ws, { userId, username: username || '' })
+
+              ws.send(JSON.stringify(this.messageService.createRoomJoinedMessage(
+                roomId,
+                this.sessions.size,
+                userId
+              )))
+
+              this.broadcast(
+                JSON.stringify(this.messageService.createUserJoinedMessage({ id: userId, username: username || undefined, joinedAt: Date.now() })),
+                ws
+              )
             }
-            
-            // 参加成功通知
-            ws.send(JSON.stringify({
-              type: 'room_joined',
-              data: {
-                roomId: roomId,
-                participantCount: this.sessions.size,
-                userId: userId
-              },
-              timestamp: new Date().toISOString()
-            }))
-            
-            // 他のユーザーに参加通知
-            this.broadcast(JSON.stringify({
-              type: 'user_joined',
-              data: {
-                userId: userId,
-                username: username,
-                roomId: roomId
-              },
-              timestamp: new Date().toISOString()
-            }), ws)
             
             console.log(`✅ [DURABLE] User ${userId} (${username}) joined room ${roomId}`)
             break
 
           case 'send_message':
             console.log(`💬 [DURABLE] Processing message in room ${roomId}`)
-            const chatMessage = message.data?.message || ''
-            const userInfo = this.users.get(ws)
-            const senderId = message.data?.userId || userInfo?.userId || 'unknown'
-            // 優先順位: 1.クライアントから送信されたユーザー名 2.保存済みユーザー名 3.フォールバック
-            const senderName = message.data?.username || userInfo?.username || `User-${senderId.split('_')[2] || 'unknown'}`
-            
-            console.log(`👤 [DURABLE] Message from userId: ${senderId}, username: ${senderName}`)
-
-            if (chatMessage.trim()) {
-              const broadcastMessage = JSON.stringify({
-                type: 'message_received',
-                data: {
-                  message: chatMessage,
-                  userId: senderId,
-                  username: senderName,
-                  roomId: roomId
-                },
-                timestamp: new Date().toISOString()
+            {
+              const current = this.users.get(ws)
+              const processed = this.messageService.processSendMessageMessage({
+                message: message.data?.message,
+                userId: message.data?.userId || current?.userId,
+                username: message.data?.username || current?.username
               })
 
+              if (!processed.valid || !processed.message || !processed.userId) {
+                ws.send(JSON.stringify(this.messageService.createErrorMessage(SecurityErrorCode.INVALID_MESSAGE, processed.error || 'Invalid message data')))
+                return
+              }
+
+              const broadcastMessage = this.messageService.createChatMessage(
+                processed.message,
+                processed.userId,
+                processed.username
+              )
+
               console.log(`📡 [DURABLE] Broadcasting message to ${this.sessions.size} sessions`)
-              this.broadcast(broadcastMessage)
+              this.broadcast(JSON.stringify(broadcastMessage))
             }
             break
 
@@ -161,48 +180,30 @@ export class ChatRoom {
             const leavingUser = this.users.get(ws)
             if (leavingUser) {
               // 他のユーザーに退出通知
-              this.broadcast(JSON.stringify({
-                type: 'user_left',
-                data: {
-                  userId: leavingUser.userId,
-                  username: leavingUser.username,
-                  roomId: roomId
-                },
-                timestamp: new Date().toISOString()
-              }), ws)
+              this.broadcast(
+                JSON.stringify(this.messageService.createUserLeftMessage({ id: leavingUser.userId, username: leavingUser.username, joinedAt: Date.now() })),
+                ws
+              )
             }
             
-            ws.send(JSON.stringify({
-              type: 'room_left',
-              data: { roomId: roomId },
-              timestamp: new Date().toISOString()
-            }))
+            ws.send(JSON.stringify(this.messageService.createRoomLeftMessage(roomId)))
             break
 
           case 'ping':
             console.log('🏓 [DURABLE] Ping received')
-            ws.send(JSON.stringify({
-              type: 'pong',
-              data: {},
-              timestamp: new Date().toISOString()
-            }))
+            ws.send(JSON.stringify(this.messageService.createPongResponse()))
             break
 
           default:
             console.log(`❓ [DURABLE] Unknown message type: ${message.type}`)
-            ws.send(JSON.stringify({
-              type: 'error',
-              data: { message: `Unknown message type: ${message.type}` },
-              timestamp: new Date().toISOString()
-            }))
+            ws.send(JSON.stringify(this.messageService.createErrorMessage(SecurityErrorCode.INVALID_MESSAGE, `Unknown message type: ${message.type}`)))
         }
       } catch (error) {
         console.error(`❌ [DURABLE] Message processing error:`, error)
-        ws.send(JSON.stringify({
-          type: 'error',
-          data: { message: 'Message processing failed' },
-          timestamp: new Date().toISOString()
-        }))
+        const errMsg = error instanceof Error
+          ? this.messageService.handleParseError(error)
+          : this.messageService.createErrorMessage(SecurityErrorCode.INVALID_MESSAGE, 'Message processing failed')
+        ws.send(JSON.stringify(errMsg))
       }
     })
 
@@ -217,15 +218,7 @@ export class ChatRoom {
       
       // 他のユーザーに退出通知
       if (userInfo) {
-        this.broadcast(JSON.stringify({
-          type: 'user_left',
-          data: {
-            userId: userInfo.userId,
-            username: userInfo.username,
-            roomId: roomId
-          },
-          timestamp: new Date().toISOString()
-        }))
+        this.broadcast(JSON.stringify(this.messageService.createUserLeftMessage({ id: userInfo.userId, username: userInfo.username, joinedAt: Date.now() })))
       }
       
       console.log(`👥 [DURABLE] Remaining sessions: ${this.sessions.size}`)

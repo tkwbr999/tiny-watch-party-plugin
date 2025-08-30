@@ -10,9 +10,7 @@ export * from './api'
 
 // utils/room.tsからの型も再エクスポート
 export { 
-  SecurityErrorCode, 
-  RoomCreateResponse,
-  RoomValidationResult 
+  SecurityErrorCode
 } from '../utils/room'
 
 // 共通型定義

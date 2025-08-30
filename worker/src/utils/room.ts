@@ -1,6 +1,7 @@
 /**
  * ルーム関連のユーティリティ関数
  */
+import { CONFIG } from './config'
 
 // ルームID生成ユーティリティ関数
 export function generateRoomId(): string {
@@ -171,55 +172,4 @@ export enum SecurityErrorCode {
   XSS_DETECTED = 'XSS_DETECTED'
 }
 
-// 設定定数
-export const CONFIG = {
-  ROOM: {
-    EXPIRY_HOURS: 3,
-    MAX_PARTICIPANTS: 10,
-    ID_PATTERN: /^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/
-  },
-  SERVER: {
-    DEFAULT_PORT: 3000,
-    WRANGLER_PORT: 8787,
-    PERFORMANCE_THRESHOLD_MS: 5000
-  },
-  CHARS: {
-    ROOM_ID: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-  },
-  SECURITY: {
-    RATE_LIMIT: {
-      MESSAGES_PER_MINUTE: 30,
-      CONNECTIONS_PER_MINUTE: 5,
-      WINDOW_MS: 60000
-    },
-    MESSAGE: {
-      MAX_LENGTH: 1000,
-      MAX_USERNAME_LENGTH: 50,
-      MAX_USER_ID_LENGTH: 50
-    },
-    TIMESTAMP_TOLERANCE_MS: 60 * 60 * 1000 // 1 hour
-  }
-} as const
-
-// 型定義
-export interface RoomCreateResponse {
-  roomId: string
-  createdAt: string
-  expiresAt: string
-  hostToken: string
-  websocketUrl: string
-  shareUrl: string
-  management: {
-    validateUrl: string
-    maxParticipants: number
-    autoExpire: boolean
-  }
-}
-
-export interface RoomValidationResult {
-  roomId: string
-  valid: boolean
-  message: string
-  format: string
-  example: string
-}
+// このファイル内のCONFIG定義は削除し、utils/config から参照するよう統一
