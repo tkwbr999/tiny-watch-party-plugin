@@ -92,6 +92,14 @@
   let connectionStatus = 'disconnected'; // 'disconnected', 'connecting', 'connected', 'error'
   let reconnectAttempts = 0;
   let maxReconnectAttempts = 3;
+  
+  // Auto-disconnect timer (3 minutes)
+  let inactivityTimer = null;
+  const INACTIVITY_TIMEOUT = 180000; // 3分 = 180,000ms
+  
+  // Timer sync interval (20 seconds)
+  let timerSyncInterval = null;
+  const TIMER_SYNC_INTERVAL = 20000; // 20秒 = 20,000ms
 
   const STORAGE_KEYS = {
     visible: 'twpp_visible',
@@ -213,6 +221,9 @@
           updateConnectionStatus('connected');
           this.startHeartbeat();
           this.joinRoom();
+          
+          // アクティビティトラッキング開始
+          startInactivityTracking();
         };
 
         this.ws.onmessage = (event) => {
@@ -230,6 +241,9 @@
           console.log('[TWPP WebSocket] Connection closed:', event.code, event.reason);
           this.isConnecting = false;
           this.cleanup();
+          
+          // アクティビティトラッキング停止
+          stopInactivityTracking();
           
           if (event.code !== 1000 && reconnectAttempts < maxReconnectAttempts) {
             this.scheduleReconnect();
@@ -292,6 +306,30 @@
       return true;
     }
 
+    sendTimerSync(timerData) {
+      if (!this.isConnected()) {
+        console.error('❌ [TWPP-CLIENT] Cannot send timer sync: not connected');
+        return false;
+      }
+
+      const message = {
+        type: 'timer_sync',
+        timestamp: Date.now(),
+        data: {
+          userId: this.userId,
+          username: currentUsername || `User-${this.userId.split('_')[2]}`,
+          currentTime: timerData.currentTime,
+          isRunning: timerData.isRunning,
+          timerStartTime: timerData.timerStartTime,
+          timerOffset: timerData.timerOffset
+        }
+      };
+
+      console.log('⏰ [TWPP-CLIENT] Sending timer sync:', message);
+      this.send(message);
+      return true;
+    }
+
     send(message) {
       if (!this.isConnected()) {
         console.error('❌ [TWPP-CLIENT] Cannot send message: not connected');
@@ -341,6 +379,13 @@
 
         case 'pong':
           console.log('🏓 [TWPP-CLIENT] Received pong');
+          break;
+          
+        case 'timer_sync':
+          console.log('⏰ [TWPP-CLIENT] Received timer sync:', message.data);
+          if (!isHost && message.data.userId !== this.userId) {
+            syncTimerWithHost(message.data);
+          }
           break;
           
         case 'error':
@@ -1690,10 +1735,251 @@
     saveToStorage();
   }
 
+  function canCreateRoom() {
+    console.log('🔍 [TWPP-CHECK] Checking if room creation is allowed...');
+    console.log('🔍 [TWPP-CHECK] Current roomId:', currentRoomId);
+    console.log('🔍 [TWPP-CHECK] WebSocket connected:', wsClient?.isConnected());
+
+    // 既存のルームIDがある場合
+    if (currentRoomId) {
+      // WebSocket接続が生きている場合は作成不可
+      if (wsClient && wsClient.isConnected()) {
+        console.log('❌ [TWPP-CHECK] Room creation blocked: Already connected to room', currentRoomId);
+        addSystemMessage(`⚠️ 既にルーム ${currentRoomId} に接続中です。新しいルームを作成するには、まず現在のルームから退出してください。`);
+        return false;
+      }
+
+      // WebSocket接続が切れているが、ルームIDが残っている場合
+      // ルームの生存確認を行う（非同期だが結果は待たない）
+      checkRoomAlive(currentRoomId);
+      console.log('⚠️ [TWPP-CHECK] Room exists but WebSocket disconnected, checking room status...');
+      addSystemMessage(`⚠️ 前回のルーム ${currentRoomId} の接続が切れています。退出ボタンを押してルームをリセットしてから、新しいルームを作成してください。`);
+      return false;
+    }
+
+    console.log('✅ [TWPP-CHECK] Room creation allowed');
+    return true;
+  }
+
+  async function checkRoomAlive(roomId) {
+    try {
+      console.log('🔍 [TWPP-ALIVE] Checking room alive:', roomId);
+      
+      const response = await fetch(`${WS_CONFIG.BASE_URL.replace('wss:', 'https:')}/api/rooms/${roomId}/status`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ [TWPP-ALIVE] Room status:', data);
+        
+        if (data.alive) {
+          addSystemMessage(`ルーム ${roomId} はまだアクティブです。このルームに再接続するか、退出してから新しいルームを作成してください。`);
+        } else {
+          console.log('🔄 [TWPP-ALIVE] Room is dead, clearing local data');
+          // 死んでいるルームの情報をクリア
+          await clearRoomData();
+          addSystemMessage(`前回のルーム ${roomId} は既に終了しています。新しいルームを作成できます。`);
+        }
+      } else {
+        console.log('⚠️ [TWPP-ALIVE] Failed to check room status:', response.status);
+        // サーバーエラーの場合、安全側に倒してローカルデータをクリア
+        await clearRoomData();
+      }
+    } catch (error) {
+      console.error('❌ [TWPP-ALIVE] Error checking room status:', error);
+      // エラーの場合も安全側に倒してローカルデータをクリア
+      await clearRoomData();
+    }
+  }
+
+  async function clearRoomData() {
+    console.log('🗑️ [TWPP-CLEAR] Clearing room data...');
+    
+    currentRoomId = null;
+    currentUsername = null;
+    isHost = false;
+    hostToken = null;
+    
+    // WebSocket接続があれば切断
+    if (wsClient) {
+      wsClient.disconnect();
+    }
+    
+    // ローカルストレージからも削除
+    await safeStorageRemove([
+      STORAGE_KEYS.roomId,
+      STORAGE_KEYS.isHost,
+      STORAGE_KEYS.hostToken
+    ]);
+    
+    // UIをリセット
+    updateConnectionStatus('disconnected');
+    hideRoomDisplay();
+    
+    console.log('✅ [TWPP-CLEAR] Room data cleared');
+  }
+
+  function hideRoomDisplay() {
+    const roomDisplay = shadowRoot?.getElementById('room-id-display');
+    if (roomDisplay) {
+      roomDisplay.style.display = 'none';
+    }
+  }
+
+  function resetInactivityTimer() {
+    console.log('🔄 [TWPP-ACTIVITY] Resetting inactivity timer');
+    
+    // 既存のタイマーをクリア
+    if (inactivityTimer) {
+      clearTimeout(inactivityTimer);
+      inactivityTimer = null;
+    }
+
+    // WebSocket接続がない場合はタイマーを設定しない
+    if (!wsClient || !wsClient.isConnected()) {
+      console.log('⚠️ [TWPP-ACTIVITY] No active WebSocket connection, skipping timer reset');
+      return;
+    }
+
+    // 3分のタイマーを設定
+    inactivityTimer = setTimeout(() => {
+      console.log('⏰ [TWPP-ACTIVITY] Inactivity timeout reached, checking conditions...');
+      checkInactivityConditions();
+    }, INACTIVITY_TIMEOUT);
+
+    console.log('✅ [TWPP-ACTIVITY] Inactivity timer set for 3 minutes');
+  }
+
+  function checkInactivityConditions() {
+    console.log('🔍 [TWPP-ACTIVITY] Checking inactivity conditions...');
+    console.log('🔍 [TWPP-ACTIVITY] Timer running:', isTimerRunning);
+    console.log('🔍 [TWPP-ACTIVITY] WebSocket connected:', wsClient?.isConnected());
+
+    // タイマーが動いていない、かつWebSocket接続がある場合に自動切断
+    if (!isTimerRunning && wsClient && wsClient.isConnected()) {
+      console.log('🚪 [TWPP-ACTIVITY] Conditions met for auto-disconnect');
+      addSystemMessage('⏰ 3分間の非アクティブによりルームから自動退出します');
+      
+      setTimeout(() => {
+        leaveRoom();
+      }, 2000); // 2秒後に実行してメッセージを表示させる
+    } else {
+      console.log('✅ [TWPP-ACTIVITY] Activity detected or timer running, staying connected');
+      // 条件に当てはまらない場合は再度タイマーをセット
+      resetInactivityTimer();
+    }
+  }
+
+  function startInactivityTracking() {
+    console.log('🎯 [TWPP-ACTIVITY] Starting inactivity tracking');
+    resetInactivityTimer();
+  }
+
+  function stopInactivityTracking() {
+    console.log('🛑 [TWPP-ACTIVITY] Stopping inactivity tracking');
+    if (inactivityTimer) {
+      clearTimeout(inactivityTimer);
+      inactivityTimer = null;
+    }
+  }
+
+  function startTimerSync() {
+    if (!isHost || !wsClient || !wsClient.isConnected()) {
+      console.log('⚠️ [TWPP-TIMER-SYNC] Cannot start timer sync: not host or not connected');
+      return;
+    }
+
+    console.log('⏰ [TWPP-TIMER-SYNC] Starting timer sync broadcasts');
+    
+    // 既存のインターバルをクリア
+    if (timerSyncInterval) {
+      clearInterval(timerSyncInterval);
+    }
+
+    // 20秒間隔で同期データを送信
+    timerSyncInterval = setInterval(() => {
+      if (isTimerRunning && wsClient && wsClient.isConnected()) {
+        const currentTime = Date.now();
+        const elapsedSeconds = Math.floor((currentTime - timerStartTime) / 1000) + timerOffset;
+        
+        const timerData = {
+          currentTime: elapsedSeconds,
+          isRunning: isTimerRunning,
+          timerStartTime: timerStartTime,
+          timerOffset: timerOffset
+        };
+
+        wsClient.sendTimerSync(timerData);
+        console.log('⏰ [TWPP-TIMER-SYNC] Sent timer sync:', elapsedSeconds, 'seconds');
+        
+        // アクティビティとして認識
+        resetInactivityTimer();
+      }
+    }, TIMER_SYNC_INTERVAL);
+  }
+
+  function stopTimerSync() {
+    if (timerSyncInterval) {
+      console.log('🛑 [TWPP-TIMER-SYNC] Stopping timer sync broadcasts');
+      clearInterval(timerSyncInterval);
+      timerSyncInterval = null;
+    }
+  }
+
+  function syncTimerWithHost(hostTimerData) {
+    if (isHost) {
+      console.log('⚠️ [TWPP-TIMER-SYNC] Ignoring sync data: this user is the host');
+      return;
+    }
+
+    console.log('⏰ [TWPP-TIMER-SYNC] Syncing timer with host data:', hostTimerData);
+    
+    // ホストのタイマー情報で同期
+    if (hostTimerData.isRunning) {
+      // ホストのタイマーが動いている場合
+      const currentTime = Date.now();
+      const syncOffset = Math.floor((currentTime - hostTimerData.timerStartTime) / 1000);
+      
+      // タイマーを同期
+      timerStartTime = hostTimerData.timerStartTime;
+      timerOffset = hostTimerData.timerOffset;
+      
+      // タイマーが停止している場合は開始
+      if (!isTimerRunning) {
+        isTimerRunning = true;
+        timerInterval = setInterval(updateTimerDisplay, 1000);
+        
+        // UIを更新（ヘッダーがタイマー状態でない場合は更新）
+        const header = shadowRoot?.getElementById('header');
+        if (header && !header.querySelector('#timer-controls')) {
+          startTimer(); // UIをタイマー表示に変更
+        }
+      }
+      
+      // 表示を即座に更新
+      updateTimerDisplay();
+      
+      console.log('✅ [TWPP-TIMER-SYNC] Timer synchronized with host');
+      addSystemMessage(`ホストのタイマーと同期しました (${formatTimerDisplay(hostTimerData.currentTime)})`);
+    }
+    
+    // ストレージに保存
+    saveToStorage();
+  }
+
   async function createRoom() {
     console.log('🏠 [TWPP-CREATE] Creating room...');
     console.log('🌐 [TWPP-CREATE] API endpoint:', `${WS_CONFIG.BASE_URL.replace('wss:', 'https:')}/api/rooms/create`);
     
+    // 既存ルームの制限チェック
+    if (!canCreateRoom()) {
+      return;
+    }
+
     // Get username
     const usernameInput = shadowRoot.getElementById('username-input');
     const username = usernameInput ? usernameInput.value.trim() : '';
@@ -2003,6 +2289,9 @@
 
   async function sendMessage() {
     console.log('💬 [TWPP-SEND] sendMessage() called');
+    
+    // アクティビティ検出
+    resetInactivityTimer();
     
     if (!inputField) {
       console.error('❌ [TWPP-SEND] No input field available');
@@ -2538,6 +2827,11 @@
     // タイマーを開始
     timerInterval = setInterval(updateTimerDisplay, 1000);
     updateTimerDisplay();
+    
+    // ホストの場合はタイマー同期を開始
+    if (isHost) {
+      startTimerSync();
+    }
 
     saveToStorage();
   }
@@ -2548,6 +2842,10 @@
       timerInterval = null;
     }
     isTimerRunning = false;
+    
+    // タイマー同期も停止
+    stopTimerSync();
+    
     saveToStorage();
   }
 
