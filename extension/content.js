@@ -114,6 +114,274 @@
     hostToken: 'twpp_host_token',
   };
 
+  // ============================
+  // カウントダウン・オーバーレイ
+  // ============================
+  let countdownOverlayHost = null; // ホスト用コンテナ（Shadow DOMで隔離）
+  let countdownShadow = null;
+  let isCountdownRunning = false;
+  let pendingTimerStart = false;
+  let rightClickStartHandler = null;
+  let rightClickMouseHandler = null;
+  let hintOverlayHost = null;
+  let hintShadow = null;
+
+  function resetTimerStateForNewCountdown() {
+    try {
+      // 既存のタイマーを停止
+      if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+      }
+      isTimerRunning = false;
+      // オフセットと開始時刻をゼロリセット
+      timerOffset = 0;
+      timerStartTime = null;
+      // ローカルストレージをクリア
+      try {
+        chrome.storage?.local?.remove?.([STORAGE_KEYS.timerStartTime, STORAGE_KEYS.timerOffset]);
+      } catch (_) {}
+    } catch (err) {
+      console.error('[TWPP] Failed to reset timer state for countdown:', err);
+    }
+  }
+
+  function createCountdownOverlay() {
+    if (countdownOverlayHost) return countdownOverlayHost;
+
+    countdownOverlayHost = document.createElement('div');
+    countdownOverlayHost.id = '__twpp_countdown_overlay__';
+    countdownOverlayHost.style.position = 'fixed';
+    countdownOverlayHost.style.inset = '0';
+    countdownOverlayHost.style.zIndex = '2147483647';
+    countdownOverlayHost.style.pointerEvents = 'none';
+    document.documentElement.appendChild(countdownOverlayHost);
+
+    countdownShadow = countdownOverlayHost.attachShadow({ mode: 'open' });
+
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes twpp-fade-scale {
+        0% { opacity: 0; transform: scale(0.7); }
+        15% { opacity: 1; transform: scale(1.0); }
+        85% { opacity: 1; transform: scale(1.0); }
+        100% { opacity: 0; transform: scale(1.1); }
+      }
+      .twpp-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.75);
+        display: grid;
+        place-items: center;
+        width: 100vw;
+        height: 100vh;
+        pointer-events: auto;
+      }
+      .twpp-count {
+        font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans JP", sans-serif;
+        color: #fff;
+        font-weight: 800;
+        text-shadow: 0 10px 30px rgba(0,0,0,0.8);
+        letter-spacing: 0.06em;
+        display: grid;
+        place-items: center;
+        gap: 24px;
+        user-select: none;
+      }
+      .twpp-number {
+        font-size: clamp(72px, 12vw, 220px);
+        line-height: 1;
+        animation: twpp-fade-scale 1000ms ease-in-out forwards;
+      }
+      .twpp-circle {
+        position: relative;
+        width: min(60vmin, 560px);
+        aspect-ratio: 1/1;
+        border-radius: 50%;
+        border: 6px solid rgba(255,255,255,0.25);
+        display: grid;
+        place-items: center;
+        box-shadow: 0 0 120px rgba(0,0,0,0.6) inset, 0 0 40px rgba(0,0,0,0.4);
+      }
+      .twpp-ring {
+        position: absolute;
+        inset: 10%;
+        border-radius: 50%;
+        border: 4px dashed rgba(255,255,255,0.25);
+      }
+      .twpp-label {
+        font-size: clamp(28px, 4vw, 72px);
+        font-weight: 900;
+        color: #00e5ff;
+        text-shadow: 0 0 24px rgba(0,229,255,0.6), 0 0 60px rgba(0,229,255,0.35);
+        animation: twpp-fade-scale 1000ms ease-in-out forwards;
+      }
+      .twpp-hint {
+        font-size: clamp(12px, 1.6vw, 18px);
+        opacity: 0.9;
+        color: rgba(255,255,255,0.85);
+      }
+    `;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'twpp-backdrop';
+    wrapper.innerHTML = `
+      <div class="twpp-count">
+        <div class="twpp-circle">
+          <div class="twpp-ring"></div>
+          <div id="twpp-number" class="twpp-number">5</div>
+        </div>
+        <div id="twpp-label" class="twpp-label" style="display:none;">再生</div>
+        <div class="twpp-hint">カウントダウン後にプレーヤーの再生を押してください</div>
+      </div>
+    `;
+
+    countdownShadow.appendChild(style);
+    countdownShadow.appendChild(wrapper);
+    return countdownOverlayHost;
+  }
+
+  function removeCountdownOverlay() {
+    if (countdownOverlayHost && countdownOverlayHost.parentNode) {
+      countdownOverlayHost.parentNode.removeChild(countdownOverlayHost);
+    }
+    countdownOverlayHost = null;
+    countdownShadow = null;
+  }
+
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  async function runCountdownOverlay() {
+    if (isCountdownRunning) return;
+    isCountdownRunning = true;
+
+    createCountdownOverlay();
+    const numberEl = countdownShadow.getElementById('twpp-number');
+    const labelEl = countdownShadow.getElementById('twpp-label');
+
+    const seq = ['5', '4', '3', '2', '1'];
+    for (const n of seq) {
+      numberEl.textContent = n;
+      numberEl.style.animation = 'none';
+      // reflow to restart animation
+      void numberEl.offsetWidth;
+      numberEl.style.animation = '';
+      await sleep(1000);
+    }
+
+    // 「再生」を表示
+    numberEl.style.display = 'none';
+    labelEl.style.display = 'block';
+    labelEl.style.animation = 'none';
+    void labelEl.offsetWidth;
+    labelEl.style.animation = '';
+    await sleep(1000);
+
+    removeCountdownOverlay();
+    isCountdownRunning = false;
+  }
+
+  function waitForRightClickToStartTimer() {
+    // すでに待機中なら再設定しない
+    if (pendingTimerStart) return;
+    pendingTimerStart = true;
+
+    const cleanup = () => {
+      pendingTimerStart = false;
+      document.removeEventListener('click', rightClickStartHandler, true);
+      document.removeEventListener('mousedown', rightClickMouseHandler, true);
+      document.removeEventListener('pointerdown', rightClickMouseHandler, true);
+      document.removeEventListener('touchstart', rightClickMouseHandler, true);
+      window.removeEventListener('click', rightClickStartHandler, true);
+      window.removeEventListener('pointerdown', rightClickMouseHandler, true);
+      removeRightClickHint();
+    };
+
+    rightClickStartHandler = (e) => {
+      try {
+        // 任意のクリック（マウス/タッチ/ポインタ）をトリガーとしてタイマー開始（イベントはブロックしない）
+        if (!pendingTimerStart) return;
+        cleanup();
+        // 左クリック時にゼロから開始するよう保障
+        timerOffset = 0;
+        timerStartTime = null;
+        startTimer();
+      } catch (err) {
+        console.error('[TWPP] Failed to start timer on left click:', err);
+      }
+    };
+
+    rightClickMouseHandler = (e) => {
+      try {
+        if (!pendingTimerStart) return;
+        const isLeftMouse = e && typeof e.button === 'number' ? e.button === 0 : false;
+        const isPointerLeft = e && e.type === 'pointerdown' ? (e.button === 0 || (e.pointerType && e.pointerType.toLowerCase() === 'touch')) : false;
+        const isTouch = e && e.type === 'touchstart';
+        if (isLeftMouse || isPointerLeft || isTouch) {
+          cleanup();
+          timerOffset = 0;
+          timerStartTime = null;
+          startTimer();
+        }
+      } catch (err) {
+        console.error('[TWPP] Failed to start timer on mousedown:', err);
+      }
+    };
+
+    // captureで確実に拾う
+    document.addEventListener('click', rightClickStartHandler, true);
+    document.addEventListener('mousedown', rightClickMouseHandler, true);
+    document.addEventListener('pointerdown', rightClickMouseHandler, true);
+    document.addEventListener('touchstart', rightClickMouseHandler, true);
+    window.addEventListener('click', rightClickStartHandler, true);
+    window.addEventListener('pointerdown', rightClickMouseHandler, true);
+    showRightClickHint();
+  }
+
+  function showRightClickHint() {
+    removeRightClickHint();
+    hintOverlayHost = document.createElement('div');
+    hintOverlayHost.id = '__twpp_right_click_hint__';
+    hintOverlayHost.style.position = 'fixed';
+    hintOverlayHost.style.inset = '0';
+    hintOverlayHost.style.zIndex = '2147483646';
+    hintOverlayHost.style.pointerEvents = 'none';
+    document.documentElement.appendChild(hintOverlayHost);
+
+    hintShadow = hintOverlayHost.attachShadow({ mode: 'open' });
+    const style = document.createElement('style');
+    style.textContent = `
+      .twpp-hint-wrap { position: fixed; bottom: 6vh; left: 50%; transform: translateX(-50%); }
+      .twpp-hint {
+        backdrop-filter: blur(8px);
+        background: rgba(0,0,0,0.55);
+        color: #fff;
+        font-weight: 700;
+        padding: 12px 16px;
+        border-radius: 12px;
+        box-shadow: 0 10px 24px rgba(0,0,0,0.35);
+        border: 1px solid rgba(255,255,255,0.2);
+        font-size: 14px;
+        letter-spacing: .03em;
+        text-align: center;
+        user-select: none;
+      }
+    `;
+    const wrap = document.createElement('div');
+    wrap.className = 'twpp-hint-wrap';
+    wrap.innerHTML = `<div class="twpp-hint">クリックでタイマーが作動します</div>`;
+    hintShadow.appendChild(style);
+    hintShadow.appendChild(wrap);
+  }
+
+  function removeRightClickHint() {
+    if (hintOverlayHost && hintOverlayHost.parentNode) {
+      hintOverlayHost.parentNode.removeChild(hintOverlayHost);
+    }
+    hintOverlayHost = null;
+    hintShadow = null;
+  }
+
   // カラーテーマ定義
   const COLOR_THEMES = {
     neon: {
@@ -2559,40 +2827,29 @@
     const countdownButton = shadowRoot.getElementById('countdown-button');
     if (!countdownButton) return;
 
-    // ボタンを無効化
+    // カウントダウン起動時にタイマー状態とストレージをリセット
+    resetTimerStateForNewCountdown();
+
+    // ボタンを無効化（クリック抑制）。表示は進捗ガイダンスへ
     countdownButton.disabled = true;
     countdownButton.textContent = 'カウントダウン中...';
     countdownButton.style.opacity = '0.6';
     countdownButton.style.cursor = 'not-allowed';
 
-    const countdownMessages = ['5', '4', '3', '2', '1', '再生！'];
-    let currentIndex = 0;
-
-    const countdownInterval = setInterval(() => {
-      if (currentIndex >= countdownMessages.length) {
-        clearInterval(countdownInterval);
-
-        // ボタンを再有効化してタイマーを開始
-        countdownButton.disabled = false;
-        countdownButton.style.opacity = '1';
-        countdownButton.style.cursor = 'pointer';
-
-        // タイマーを開始
-        startTimer();
-        return;
-      }
-
-      const message = {
-        ts: formatTime(),
-        text: countdownMessages[currentIndex],
-      };
-
-      messages.push(message);
-      renderMessages();
-      saveToStorage();
-
-      currentIndex++;
-    }, 1000);
+    // フルスクリーン・カウントダウンを実行
+    runCountdownOverlay()
+      .then(() => {
+        // カウントダウン完了後、最初のクリックでタイマー開始
+        // ボタン表示を注意喚起に変更し、クリック待ち状態へ
+        const btn = shadowRoot.getElementById('countdown-button');
+        if (btn) {
+          btn.disabled = true;
+          btn.textContent = 'クリックでタイマー開始';
+          btn.style.opacity = '0.9';
+          btn.style.cursor = 'not-allowed';
+        }
+        waitForRightClickToStartTimer();
+      });
   }
 
   function formatTimerDisplay(totalSeconds) {
