@@ -126,6 +126,124 @@
   let hintOverlayHost = null;
   let hintShadow = null;
 
+  // ============================
+  // ビュー状態管理（重複UIの排除）
+  // ============================
+  let viewState = 'initial'; // 'initial' | 'connected' | 'countdownReady' | 'timer'
+
+  function setViewState(state) {
+    viewState = state;
+    applyViewState();
+  }
+
+  function ensureCompactStatusBar() {
+    const header = shadowRoot?.getElementById('header');
+    if (!header) return;
+    if (shadowRoot.getElementById('compact-status-bar')) return;
+
+    const bar = document.createElement('div');
+    bar.id = 'compact-status-bar';
+    bar.style.cssText = [
+      'display:flex', 'align-items:center', 'justify-content:space-between', 'gap:8px',
+      'padding:6px 8px', 'margin-bottom:6px', 'background:rgba(0,0,0,0.2)',
+      'border:1px solid rgba(255,255,255,0.15)', 'border-radius:6px'
+    ].join(';');
+
+    bar.innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+        <span id="compact-status-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#9ca3af;"></span>
+        <span id="compact-room-pill" style="display:inline-flex;align-items:center;gap:6px;padding:2px 6px;border-radius:9999px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);font-size:12px;color:rgba(255,255,255,0.9);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+          <span id="compact-room-id">未参加</span>
+        </span>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <button id="compact-copy" title="ルームIDをコピー" style="padding:2px 6px;font-size:11px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.9);border-radius:4px;cursor:pointer;">コピー</button>
+        <button id="compact-leave" title="ルームから退出" style="padding:2px 6px;font-size:11px;border:1px solid rgba(239,68,68,0.5);background:rgba(239,68,68,0.15);color:rgba(255,235,235,0.95);border-radius:4px;cursor:pointer;">退出</button>
+      </div>
+    `;
+    header.insertBefore(bar, header.firstChild);
+
+    // イベント
+    const copyBtn = shadowRoot.getElementById('compact-copy');
+    const leaveBtn = shadowRoot.getElementById('compact-leave');
+    copyBtn?.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!currentRoomId) return;
+      try {
+        await navigator.clipboard.writeText(currentRoomId);
+        addSystemMessage(`ルームID ${currentRoomId} をコピーしました`);
+      } catch (_) {}
+    }, true);
+    leaveBtn?.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      leaveRoom();
+      setViewState('initial');
+    }, true);
+  }
+
+  function updateCompactStatus() {
+    const dot = shadowRoot?.getElementById('compact-status-dot');
+    const pillText = shadowRoot?.getElementById('compact-room-id');
+    const copyBtn = shadowRoot?.getElementById('compact-copy');
+    const leaveBtn = shadowRoot?.getElementById('compact-leave');
+    if (!dot || !pillText) return;
+    const status = connectionStatus;
+    let color = '#9ca3af';
+    if (status === 'connected') color = 'rgba(34,197,94,0.9)';
+    else if (status === 'connecting') color = 'rgba(255,189,46,0.9)';
+    else if (status === 'error') color = 'rgba(239,68,68,0.9)';
+    dot.style.background = color;
+    pillText.textContent = currentRoomId || '未参加';
+    const enabled = !!currentRoomId;
+    if (copyBtn) copyBtn.disabled = !enabled;
+    if (leaveBtn) leaveBtn.disabled = !enabled;
+  }
+
+  function applyViewState() {
+    const roomSection = shadowRoot?.getElementById('room-section');
+    const connPanel = shadowRoot?.getElementById('connection-status');
+    const header = shadowRoot?.getElementById('header');
+    const countdownBtn = shadowRoot?.getElementById('countdown-button');
+    if (connPanel) connPanel.style.display = 'none'; // 大きな接続パネルは常時非表示
+
+    if (!header) return;
+    ensureCompactStatusBar();
+    updateCompactStatus();
+
+    switch (viewState) {
+      case 'initial':
+        if (roomSection) roomSection.style.display = 'block';
+        if (countdownBtn) countdownBtn.style.display = 'none';
+        break;
+      case 'connected':
+        if (roomSection) roomSection.style.display = 'none';
+        if (countdownBtn) {
+          countdownBtn.style.display = 'block';
+          countdownBtn.disabled = false;
+          countdownBtn.textContent = 'カウントダウン';
+          countdownBtn.style.opacity = '1';
+          countdownBtn.style.cursor = 'pointer';
+        }
+        break;
+      case 'countdownReady':
+        if (roomSection) roomSection.style.display = 'none';
+        if (countdownBtn) {
+          countdownBtn.style.display = 'block';
+          countdownBtn.disabled = true;
+          countdownBtn.textContent = 'クリックでタイマー開始';
+          countdownBtn.style.opacity = '0.9';
+          countdownBtn.style.cursor = 'not-allowed';
+        }
+        break;
+      case 'timer':
+        if (roomSection) roomSection.style.display = 'none';
+        // timer時はstartTimer()がheader内容を置換するため、ボタン制御は不要
+        break;
+    }
+  }
+
   function resetTimerStateForNewCountdown() {
     try {
       // 既存のタイマーを停止
@@ -305,6 +423,7 @@
         // 左クリック時にゼロから開始するよう保障
         timerOffset = 0;
         timerStartTime = null;
+        setViewState('timer');
         startTimer();
       } catch (err) {
         console.error('[TWPP] Failed to start timer on left click:', err);
@@ -321,6 +440,7 @@
           cleanup();
           timerOffset = 0;
           timerStartTime = null;
+          setViewState('timer');
           startTimer();
         }
       } catch (err) {
@@ -642,13 +762,23 @@
 
         case 'room_joined':
           console.log('🏠 [TWPP-CLIENT] Successfully joined room');
+          if (message?.data?.roomId) {
+            currentRoomId = message.data.roomId;
+          }
           addSystemMessage('ルームに正常に接続しました');
+          // 接続ビューへ
+          try { setViewState('connected'); } catch (_) {}
           break;
 
         case 'pong':
           console.log('🏓 [TWPP-CLIENT] Received pong');
           break;
           
+        case 'countdown_start':
+          console.log('🎬 [TWPP-CLIENT] Received countdown_start:', message.data);
+          triggerSynchronizedCountdown(message.data);
+          break;
+
         case 'timer_sync':
           console.log('⏰ [TWPP-CLIENT] Received timer sync:', message.data);
           if (!isHost && message.data.userId !== this.userId) {
@@ -1987,6 +2117,8 @@
     if (!skipSave) {
       saveToStorage();
     }
+    // コンパクトステータスも更新
+    try { updateCompactStatus(); } catch (_) {}
   }
 
   function addWebSocketMessage(data) {
@@ -2541,6 +2673,7 @@
       console.log('🖼️ [TWPP-LEAVE] Updating UI...');
       hideRoomId();
       updateConnectionStatus('disconnected');
+      try { setViewState('initial'); } catch (_) {}
       
       console.log(`✅ [TWPP-LEAVE] Successfully left room ${previousRoomId}`);
       addSystemMessage(`ルーム ${previousRoomId} から退出しました`);
@@ -2832,15 +2965,25 @@
 
     // ボタンを無効化（クリック抑制）。表示は進捗ガイダンスへ
     countdownButton.disabled = true;
-    countdownButton.textContent = 'カウントダウン中...';
+    countdownButton.textContent = '同期準備中...';
     countdownButton.style.opacity = '0.6';
     countdownButton.style.cursor = 'not-allowed';
 
-    // フルスクリーン・カウントダウンを実行
-    runCountdownOverlay()
-      .then(() => {
-        // カウントダウン完了後、最初のクリックでタイマー開始
-        // ボタン表示を注意喚起に変更し、クリック待ち状態へ
+    // サーバへ同期カウントダウン開始リクエストを送信
+    try {
+      const req = {
+        type: 'countdown_request',
+        timestamp: Date.now(),
+        data: {
+          durationMs: 5000,
+          playLabelMs: 1000
+        }
+      };
+      wsClient?.send(req);
+    } catch (err) {
+      console.error('[TWPP] Failed to send countdown_request:', err);
+      // フォールバック: ローカルカウントダウン
+      runCountdownOverlay().then(() => {
         const btn = shadowRoot.getElementById('countdown-button');
         if (btn) {
           btn.disabled = true;
@@ -2848,8 +2991,36 @@
           btn.style.opacity = '0.9';
           btn.style.cursor = 'not-allowed';
         }
+        setViewState('countdownReady');
         waitForRightClickToStartTimer();
       });
+    }
+  }
+
+  function triggerSynchronizedCountdown(data) {
+    try {
+      const now = Date.now();
+      const serverSentAt = Number(data?.serverSentAt) || now;
+      const startAt = Number(data?.startAt) || (now + 1000);
+      const latencyEstimate = Math.max(0, Math.floor((now - serverSentAt) / 2));
+      const delay = Math.max(0, startAt - now - latencyEstimate);
+
+      setTimeout(() => {
+        runCountdownOverlay().then(() => {
+          const btn = shadowRoot.getElementById('countdown-button');
+          if (btn) {
+            btn.disabled = true;
+            btn.textContent = 'クリックでタイマー開始';
+            btn.style.opacity = '0.9';
+            btn.style.cursor = 'not-allowed';
+          }
+          setViewState('countdownReady');
+          waitForRightClickToStartTimer();
+        });
+      }, delay);
+    } catch (err) {
+      console.error('[TWPP] Failed to schedule synchronized countdown:', err);
+    }
   }
 
   function formatTimerDisplay(totalSeconds) {
@@ -3138,6 +3309,11 @@
 
     renderMessages();
     applySidebarVisibility();
+
+    // 初期ビュー状態適用
+    try {
+      setViewState(currentRoomId ? 'connected' : 'initial');
+    } catch (_) {}
 
     // Restore room state if available
     if (currentRoomId) {

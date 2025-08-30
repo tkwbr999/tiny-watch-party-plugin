@@ -104,6 +104,20 @@ export function validateMessage(message: any): { valid: boolean; error?: string 
     case 'leave_room':
       // これらのメッセージタイプは追加検証不要
       break
+    
+    case 'countdown_request':
+      // 同期カウントダウン要求
+      // 任意の設定値を受け取るが、範囲を制限
+      if (message.data) {
+        const { durationMs, playLabelMs } = message.data
+        if (durationMs !== undefined && (typeof durationMs !== 'number' || durationMs < 1000 || durationMs > 30000)) {
+          return { valid: false, error: 'durationMs must be number between 1000-30000' }
+        }
+        if (playLabelMs !== undefined && (typeof playLabelMs !== 'number' || playLabelMs < 500 || playLabelMs > 5000)) {
+          return { valid: false, error: 'playLabelMs must be number between 500-5000' }
+        }
+      }
+      break
       
     default:
       return { valid: false, error: `Unknown message type: ${message.type}` }

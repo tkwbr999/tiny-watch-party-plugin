@@ -19,6 +19,7 @@ export class ChatRoom {
   sessions: Set<WebSocket>
   users: Map<WebSocket, { userId: string; username: string }>
   messageService: MessageService
+  lastCountdownAt?: number
 
   constructor(state: DurableObjectState) {
     this.state = state
@@ -120,6 +121,37 @@ export class ChatRoom {
         }
 
         switch (message.type) {
+          case 'countdown_request':
+            {
+              // 連続発火の抑止（3秒間）
+              const now = Date.now()
+              const minGapMs = 3000
+              if (this.lastCountdownAt && (now - this.lastCountdownAt) < minGapMs) {
+                // スルー（静かに無視）
+                return
+              }
+
+              const durationMs = Math.min(Math.max(Number(message.data?.durationMs ?? 5000), 1000), 30000)
+              const playLabelMs = Math.min(Math.max(Number(message.data?.playLabelMs ?? 1000), 500), 5000)
+              // 2秒後に開始（ネットワーク/描画猶予）
+              const startAt = now + 2000
+
+              const payload = {
+                type: 'countdown_start',
+                data: {
+                  startAt,
+                  serverSentAt: now,
+                  durationMs,
+                  playLabelMs,
+                  initiatorId: this.users.get(ws)?.userId || 'unknown'
+                },
+                timestamp: Date.now()
+              }
+
+              this.lastCountdownAt = now
+              this.broadcast(JSON.stringify(payload))
+            }
+            break
           case 'join_room':
             console.log(`👤 [DURABLE] User joining room ${roomId}`)
             {
